@@ -1,0 +1,24 @@
+{
+  "name": "pegasus-payment-plan-calendar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome extension that shows the payment dates an installment plan would add, beside the plans you already entered. Local-only.",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@types/chrome": "0.2.7",
+    "esbuild": "0.28.2",
+    "eslint": "9.39.5",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.68.0",
+    "vitest": "4.1.11"
+  }
+}

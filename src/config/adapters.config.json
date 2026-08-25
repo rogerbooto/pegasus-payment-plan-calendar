@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "engineMin": "0.1.0",
+  "adapters": {
+    "shopify-checkout": {
+      "hosts": ["checkout.shopify.com", "shop.app"],
+      "pathPatterns": ["/checkouts/"],
+      "anchors": {
+        "orderTotal": {
+          "css": [],
+          "labelLexicon": ["total", "order total", "montant total", "total de la commande"]
+        },
+        "bnplWidget": { "css": [], "iframeOrigins": [] },
+        "installmentText": { "patterns": ["{count} payments of {money}", "{count} versements de {money}"] }
+      }
+    },
+    "stripe-hosted": {
+      "hosts": ["checkout.stripe.com"],
+      "pathPatterns": ["/"],
+      "anchors": {
+        "orderTotal": {
+          "css": [],
+          "labelLexicon": ["total", "total due", "montant total"]
+        },
+        "bnplWidget": { "css": [], "iframeOrigins": [] },
+        "installmentText": { "patterns": ["{count} payments of {money}"] }
+      }
+    },
+    "whop": {
+      "hosts": ["whop.com"],
+      "pathPatterns": ["/checkout/"],
+      "anchors": {
+        "orderTotal": {
+          "css": [],
+          "labelLexicon": ["total", "order total"]
+        },
+        "bnplWidget": { "css": [], "iframeOrigins": [] },
+        "installmentText": { "patterns": ["{count} payments of {money}"] }
+      }
+    }
+  }
+}

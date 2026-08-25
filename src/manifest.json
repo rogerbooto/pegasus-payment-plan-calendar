@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Pegasus Payment Plan Calendar",
+  "version": "0.1.0",
+  "description": "Shows the payment dates an installment plan would add, beside the plans you already entered. Everything stays on this device.",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": [
+    "https://checkout.shopify.com/*",
+    "https://shop.app/*",
+    "https://checkout.stripe.com/*",
+    "https://whop.com/*",
+    "https://www.amazon.com/*",
+    "https://www.amazon.ca/*"
+  ],
+  "optional_host_permissions": ["https://*/*"],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://checkout.shopify.com/*",
+        "https://shop.app/*",
+        "https://checkout.stripe.com/*",
+        "https://whop.com/*",
+        "https://www.amazon.com/*",
+        "https://www.amazon.ca/*"
+      ],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": { "service_worker": "service-worker.js" },
+  "action": {
+    "default_title": "Pegasus Payment Plan Calendar",
+    "default_popup": "popup.html"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'"
+  }
+}
