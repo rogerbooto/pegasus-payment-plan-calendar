@@ -1,0 +1,12 @@
+{
+  "adapter": "shopify-checkout",
+  "describes": "two VISIBLE, disagreeing totals both matched by the adapter's own [data-checkout-payment-due-target] selector -- proves the ambiguity refusal holds through the FULL adapter wiring (locateByCssOrLabel -> locateAdapterAnchors -> extractAdapterAnchors), not just at the parser-primitive level already covered by tests/unit/parser/candidates.test.ts",
+  "expectedKind": "PARTIAL",
+  "expectedMissing": ["orderTotal"],
+  "expected": {
+    "installmentCount": 4,
+    "cadence": "BIWEEKLY",
+    "perInstallmentCents": 2249,
+    "currency": "CAD"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "adapter": "shopify-checkout",
+  "describes": "a full order summary + Shop Pay Installments widget + a bound instalment phrase with an explicit cadence -- every hard gate passes and the soft score reaches the confirmable floor via adapter_path + labelled_total_row + bound_cluster + provider_widget",
+  "expectedKind": "PARSED_CONFIRMABLE",
+  "expected": {
+    "orderTotalCents": 8996,
+    "installmentCount": 4,
+    "cadence": "BIWEEKLY",
+    "perInstallmentCents": 2249,
+    "currency": "CAD"
+  }
+}

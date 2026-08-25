@@ -1,0 +1,12 @@
+{
+  "adapter": "whop",
+  "describes": "a full order summary + Sezzle widget marker + a bound weekly instalment phrase -- every hard gate passes and the soft score reaches the confirmable floor",
+  "expectedKind": "PARSED_CONFIRMABLE",
+  "expected": {
+    "orderTotalCents": 5997,
+    "installmentCount": 3,
+    "cadence": "WEEKLY",
+    "perInstallmentCents": 1999,
+    "currency": "USD"
+  }
+}

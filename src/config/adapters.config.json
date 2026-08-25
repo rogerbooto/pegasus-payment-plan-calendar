@@ -7,11 +7,20 @@
       "pathPatterns": ["/checkouts/"],
       "anchors": {
         "orderTotal": {
-          "css": [],
+          "css": ["[data-checkout-payment-due-target]", ".payment-due__price", "[data-testid=\"TotalPrice\"]"],
           "labelLexicon": ["total", "order total", "montant total", "total de la commande"]
         },
-        "bnplWidget": { "css": [], "iframeOrigins": [] },
-        "installmentText": { "patterns": ["{count} payments of {money}", "{count} versements de {money}"] }
+        "bnplWidget": {
+          "css": ["shopify-payment-terms"],
+          "iframeOrigins": ["js.klarna.com", "js.afterpay.com", "cdn.affirm.com"]
+        },
+        "installmentText": {
+          "patterns": [
+            "{count} interest-free payments of {money} {cadence}",
+            "{count} payments of {money}",
+            "{count} versements de {money}"
+          ]
+        }
       }
     },
     "stripe-hosted": {
@@ -19,11 +28,24 @@
       "pathPatterns": ["/"],
       "anchors": {
         "orderTotal": {
-          "css": [],
+          "css": [
+            "[data-testid=\"product-summary-total-amount\"]",
+            ".OrderDetails-total",
+            "[data-testid=\"line-item-total-amount\"]"
+          ],
           "labelLexicon": ["total", "total due", "montant total"]
         },
-        "bnplWidget": { "css": [], "iframeOrigins": [] },
-        "installmentText": { "patterns": ["{count} payments of {money}"] }
+        "bnplWidget": {
+          "css": [
+            "[data-testid=\"klarna\"]",
+            "[data-testid=\"afterpay_clearpay\"]",
+            "[data-testid=\"affirm\"]"
+          ],
+          "iframeOrigins": ["js.klarna.com"]
+        },
+        "installmentText": {
+          "patterns": ["{count} payments of {money}"]
+        }
       }
     },
     "whop": {
@@ -31,11 +53,16 @@
       "pathPatterns": ["/checkout/"],
       "anchors": {
         "orderTotal": {
-          "css": [],
+          "css": [".checkout-summary__total", "[data-testid=\"order-total\"]"],
           "labelLexicon": ["total", "order total"]
         },
-        "bnplWidget": { "css": [], "iframeOrigins": [] },
-        "installmentText": { "patterns": ["{count} payments of {money}"] }
+        "bnplWidget": {
+          "css": ["[data-testid=\"sezzle-widget\"]", ".sezzle-checkout-button"],
+          "iframeOrigins": ["widget.sezzle.com"]
+        },
+        "installmentText": {
+          "patterns": ["{count} payments of {money} {cadence}"]
+        }
       }
     }
   }

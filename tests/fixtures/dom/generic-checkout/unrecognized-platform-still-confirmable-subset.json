@@ -1,0 +1,12 @@
+{
+  "describes": "an unrecognized checkout platform (host matches no adapter, e.g. an Amazon-shaped page): every scalar hard-gates via the generic label lexicon + phrase pattern + provider widget, but the generic path lacks the adapter_path soft signal, so soft score is 3/6 -- one short of the confirmable floor. The engine caps at PARTIAL even though all four scalars are trustworthy, exactly per D6 §A.2's 'the generic path... is not to compete with adapters on precision'.",
+  "expectedKind": "PARTIAL",
+  "expectedMissing": [],
+  "expected": {
+    "orderTotalCents": 8996,
+    "installmentCount": 4,
+    "cadence": "BIWEEKLY",
+    "perInstallmentCents": 2249,
+    "currency": "USD"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "adapter": "shopify-checkout",
+  "describes": "a matching instalment phrase with no cadence clause -- count/amount/total all hard-gate, cadence stays a missing scalar (never guessed), capping the state at PARTIAL",
+  "expectedKind": "PARTIAL",
+  "expectedMissing": ["cadence"],
+  "expected": {
+    "orderTotalCents": 8996,
+    "installmentCount": 4,
+    "perInstallmentCents": 2249,
+    "currency": "CAD"
+  }
+}

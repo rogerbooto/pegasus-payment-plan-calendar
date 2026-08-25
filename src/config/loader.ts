@@ -56,6 +56,10 @@ const PATTERN_CHARSET = /^[A-Za-z0-9\s{}$,.'-]+$/;
 const PATTERN_TOKENS = ["{count}", "{money}", "{cadence}"];
 const HOST_CHARSET = /^[a-z0-9.-]+$/;
 const PATH_PREFIX_CHARSET = /^\/[A-Za-z0-9/_-]*$/;
+/** Label-lexicon terms are plain EN/FR words, never a selector or pattern. */
+const LABEL_LEXICON_CHARSET = /^[A-Za-z\s'-]{1,60}$/;
+/** Defense-in-depth: every config array is bounded, not just individually-capped strings. */
+const MAX_ARRAY_LENGTH = 20;
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -65,14 +69,53 @@ function isStringArray(v: unknown): v is string[] {
   return Array.isArray(v) && v.every((s) => typeof s === "string");
 }
 
+function tooLong(arr: readonly unknown[]): boolean {
+  return arr.length > MAX_ARRAY_LENGTH;
+}
+
 function validateSelectors(css: unknown, errors: string[], where: string): void {
   if (!isStringArray(css)) {
     errors.push(`${where}.css must be an array of strings`);
     return;
   }
+  if (tooLong(css)) errors.push(`${where}.css exceeds the ${MAX_ARRAY_LENGTH}-entry cap`);
   for (const sel of css) {
     if (sel.length === 0 || sel.length > MAX_SELECTOR_LENGTH || !CSS_SELECTOR_CHARSET.test(sel)) {
       errors.push(`${where}.css contains an invalid selector`);
+    }
+  }
+}
+
+/** labelLexicon: plain-word EN/FR terms only — never a selector, never page-data-interpolated. */
+function validateLabelLexicon(lexicon: unknown, errors: string[], where: string): void {
+  if (lexicon === undefined) return; // optional field
+  if (!isStringArray(lexicon)) {
+    errors.push(`${where}.labelLexicon must be an array of strings`);
+    return;
+  }
+  if (tooLong(lexicon)) errors.push(`${where}.labelLexicon exceeds the ${MAX_ARRAY_LENGTH}-entry cap`);
+  for (const term of lexicon) {
+    if (!LABEL_LEXICON_CHARSET.test(term)) {
+      errors.push(`${where}.labelLexicon contains an invalid term`);
+    }
+  }
+}
+
+/**
+ * iframeOrigins: bare hostnames only (same charset as adapter `hosts`) — a
+ * provider iframe `src` is only ever read for its origin, structurally, so
+ * a scheme/path/query has no legitimate reason to appear here.
+ */
+function validateIframeOrigins(origins: unknown, errors: string[], where: string): void {
+  if (origins === undefined) return; // optional field
+  if (!isStringArray(origins)) {
+    errors.push(`${where}.iframeOrigins must be an array of strings`);
+    return;
+  }
+  if (tooLong(origins)) errors.push(`${where}.iframeOrigins exceeds the ${MAX_ARRAY_LENGTH}-entry cap`);
+  for (const origin of origins) {
+    if (!HOST_CHARSET.test(origin)) {
+      errors.push(`${where}.iframeOrigins contains an invalid origin`);
     }
   }
 }
@@ -82,6 +125,7 @@ function validatePatterns(patterns: unknown, errors: string[], where: string): v
     errors.push(`${where}.patterns must be an array of strings`);
     return;
   }
+  if (tooLong(patterns)) errors.push(`${where}.patterns exceeds the ${MAX_ARRAY_LENGTH}-entry cap`);
   for (const p of patterns) {
     if (p.length === 0 || p.length > MAX_SELECTOR_LENGTH || !PATTERN_CHARSET.test(p)) {
       errors.push(`${where}.patterns contains an invalid pattern`);
@@ -113,6 +157,7 @@ function validateAdapter(
   if (!isStringArray(raw.hosts) || raw.hosts.length === 0) {
     errors.push("hosts must be a non-empty array of strings");
   } else {
+    if (tooLong(raw.hosts)) errors.push(`hosts exceeds the ${MAX_ARRAY_LENGTH}-entry cap`);
     for (const host of raw.hosts) {
       if (!HOST_CHARSET.test(host)) errors.push(`invalid host ${host}`);
       else if (!manifestHosts.includes(host)) {
@@ -123,6 +168,7 @@ function validateAdapter(
   if (!isStringArray(raw.pathPatterns) || raw.pathPatterns.length === 0) {
     errors.push("pathPatterns must be a non-empty array of strings");
   } else {
+    if (tooLong(raw.pathPatterns)) errors.push(`pathPatterns exceeds the ${MAX_ARRAY_LENGTH}-entry cap`);
     for (const p of raw.pathPatterns) {
       if (!PATH_PREFIX_CHARSET.test(p)) errors.push(`invalid path pattern ${p}`);
     }
@@ -134,14 +180,35 @@ function validateAdapter(
     for (const key of Object.keys(anchors)) {
       if (!(ANCHOR_GROUP_KEYS as readonly string[]).includes(key)) errors.push(`unknown anchor group ${key}`);
     }
-    for (const group of ["orderTotal", "bnplWidget"]) {
-      const g = anchors[group];
-      if (!isRecord(g)) errors.push(`${group} must be an object`);
-      else validateSelectors(g.css, errors, `anchors.${group}`);
+    const orderTotal = anchors.orderTotal;
+    if (!isRecord(orderTotal)) {
+      errors.push("orderTotal must be an object");
+    } else {
+      for (const key of Object.keys(orderTotal)) {
+        if (key !== "css" && key !== "labelLexicon") errors.push(`anchors.orderTotal has an unknown key ${key}`);
+      }
+      validateSelectors(orderTotal.css, errors, "anchors.orderTotal");
+      validateLabelLexicon(orderTotal.labelLexicon, errors, "anchors.orderTotal");
+    }
+    const bnplWidget = anchors.bnplWidget;
+    if (!isRecord(bnplWidget)) {
+      errors.push("bnplWidget must be an object");
+    } else {
+      for (const key of Object.keys(bnplWidget)) {
+        if (key !== "css" && key !== "iframeOrigins") errors.push(`anchors.bnplWidget has an unknown key ${key}`);
+      }
+      validateSelectors(bnplWidget.css, errors, "anchors.bnplWidget");
+      validateIframeOrigins(bnplWidget.iframeOrigins, errors, "anchors.bnplWidget");
     }
     const installmentText = anchors.installmentText;
-    if (!isRecord(installmentText)) errors.push("installmentText must be an object");
-    else validatePatterns(installmentText.patterns, errors, "anchors.installmentText");
+    if (!isRecord(installmentText)) {
+      errors.push("installmentText must be an object");
+    } else {
+      for (const key of Object.keys(installmentText)) {
+        if (key !== "patterns") errors.push(`anchors.installmentText has an unknown key ${key}`);
+      }
+      validatePatterns(installmentText.patterns, errors, "anchors.installmentText");
+    }
   }
   if (errors.length > 0) return { errors };
   return { config: raw as unknown as AdapterConfig, errors };

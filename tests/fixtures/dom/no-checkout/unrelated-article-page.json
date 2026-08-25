@@ -1,0 +1,5 @@
+{
+  "describes": "a page with no checkout signal at all -- detectCheckout must score below the 2-of-3 floor and the engine must reach the honest DEGRADED(no_match) state without ever attempting extraction",
+  "expectedKind": "DEGRADED",
+  "expectedReason": "no_match"
+}

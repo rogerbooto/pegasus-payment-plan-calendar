@@ -46,4 +46,60 @@ describe("bundled selector config", () => {
       /schemaVersion/,
     );
   });
+
+  // The four checks below are new hardening added alongside the
+  // adapter-engine build (labelLexicon/iframeOrigins were previously
+  // unvalidated -- T16 requires the config be treated as untrusted input
+  // even though we author it). Each test targets ONE specific guard and
+  // would pass vacuously if that guard were removed rather than some other
+  // unrelated check catching the tampering -- so each uses a minimal,
+  // otherwise-valid tamper that only that guard can reject.
+
+  it("a labelLexicon term outside the plain-word charset disables the adapter", () => {
+    const tampered = structuredClone(bundledConfig) as Record<string, unknown>;
+    const whopAnchors = (
+      tampered.adapters as Record<string, { anchors: { orderTotal: { labelLexicon: string[] } } } | undefined>
+    )["whop"];
+    if (!whopAnchors) throw new Error("fixture drift: bundled config no longer defines the 'whop' adapter");
+    whopAnchors.anchors.orderTotal.labelLexicon = ["total{count}"];
+    const result = validateConfig(tampered, manifestHosts);
+    expect(result.adapters.has("whop")).toBe(false);
+    expect(result.disabled.find((d) => d.id === "whop")?.errors.some((e) => e.includes("labelLexicon"))).toBe(true);
+  });
+
+  it("an iframeOrigin outside the bare-hostname charset disables the adapter", () => {
+    const tampered = structuredClone(bundledConfig) as Record<string, unknown>;
+    const whopAnchors = (
+      tampered.adapters as Record<string, { anchors: { bnplWidget: { iframeOrigins: string[] } } } | undefined>
+    )["whop"];
+    if (!whopAnchors) throw new Error("fixture drift: bundled config no longer defines the 'whop' adapter");
+    whopAnchors.anchors.bnplWidget.iframeOrigins = ["https://widget.sezzle.com/evil"];
+    const result = validateConfig(tampered, manifestHosts);
+    expect(result.adapters.has("whop")).toBe(false);
+    expect(result.disabled.find((d) => d.id === "whop")?.errors.some((e) => e.includes("iframeOrigins"))).toBe(true);
+  });
+
+  it("an unknown key inside an anchor group disables the adapter (closed schema, not just top-level)", () => {
+    const tampered = structuredClone(bundledConfig) as Record<string, unknown>;
+    const whopAnchors = (
+      tampered.adapters as Record<string, { anchors: { orderTotal: Record<string, unknown> } } | undefined>
+    )["whop"];
+    if (!whopAnchors) throw new Error("fixture drift: bundled config no longer defines the 'whop' adapter");
+    whopAnchors.anchors.orderTotal.remoteFetchUrl = "https://evil.example/selectors.json";
+    const result = validateConfig(tampered, manifestHosts);
+    expect(result.adapters.has("whop")).toBe(false);
+    expect(result.disabled.find((d) => d.id === "whop")?.errors.some((e) => e.includes("unknown key"))).toBe(true);
+  });
+
+  it("a css array beyond the entry cap disables the adapter (defense-in-depth against a bloated config)", () => {
+    const tampered = structuredClone(bundledConfig) as Record<string, unknown>;
+    const whopAnchors = (
+      tampered.adapters as Record<string, { anchors: { orderTotal: { css: string[] } } } | undefined>
+    )["whop"];
+    if (!whopAnchors) throw new Error("fixture drift: bundled config no longer defines the 'whop' adapter");
+    whopAnchors.anchors.orderTotal.css = Array.from({ length: 21 }, (_, i) => `.total-${i}`);
+    const result = validateConfig(tampered, manifestHosts);
+    expect(result.adapters.has("whop")).toBe(false);
+    expect(result.disabled.find((d) => d.id === "whop")?.errors.some((e) => e.includes("entry cap"))).toBe(true);
+  });
 });

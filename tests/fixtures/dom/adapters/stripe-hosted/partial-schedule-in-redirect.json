@@ -1,0 +1,10 @@
+{
+  "adapter": "stripe-hosted",
+  "describes": "the total and a BNPL provider marker are present, but no bound instalment phrase is on THIS page -- the schedule finalizes inside the provider redirect (D6 §B's own caveat: expect PARTIAL frequently on Stripe). The engine still honestly surfaces what it has (a labelled total) rather than degrading entirely.",
+  "expectedKind": "PARTIAL",
+  "expectedMissing": ["installmentCount", "cadence", "perInstallment"],
+  "expected": {
+    "orderTotalCents": 15000,
+    "currency": "USD"
+  }
+}

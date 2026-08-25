@@ -21,13 +21,20 @@ export const ADAPTER_REGISTRY: readonly CheckoutAdapter[] = [
 ];
 
 /**
- * Selects the single winning adapter for a page, or null when none match
- * (the engine then falls back to the generic detector).
+ * The precedence logic itself, parameterized over an adapter list so it is
+ * independently testable against fake adapters (tie-break order, a
+ * throwing match(), a lower-specificity adapter losing to a later, higher
+ * one) without depending on real bundled config / real hosts to construct
+ * those scenarios. `selectAdapter` below is the sanctioned entrypoint,
+ * always called with the real ADAPTER_REGISTRY.
  */
-export function selectAdapter(page: PageProbe): CheckoutAdapter | null {
+export function selectAdapterFrom(
+  adapters: readonly CheckoutAdapter[],
+  page: PageProbe,
+): CheckoutAdapter | null {
   let winner: CheckoutAdapter | null = null;
   let winningSpecificity = -1;
-  for (const adapter of ADAPTER_REGISTRY) {
+  for (const adapter of adapters) {
     let result;
     try {
       result = adapter.match(page);
@@ -40,4 +47,12 @@ export function selectAdapter(page: PageProbe): CheckoutAdapter | null {
     }
   }
   return winner;
+}
+
+/**
+ * Selects the single winning adapter for a page, or null when none match
+ * (the engine then falls back to the generic detector).
+ */
+export function selectAdapter(page: PageProbe): CheckoutAdapter | null {
+  return selectAdapterFrom(ADAPTER_REGISTRY, page);
 }
