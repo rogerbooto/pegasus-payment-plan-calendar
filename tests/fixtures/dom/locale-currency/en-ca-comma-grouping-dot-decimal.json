@@ -1,0 +1,9 @@
+{
+  "finding": "M11-T02",
+  "category": "locale-currency",
+  "describes": "en ca comma grouping dot decimal",
+  "expectedResult": "parsed",
+  "expectedCents": 123456,
+  "expectedCurrency": "CAD",
+  "expectedReason": null
+}

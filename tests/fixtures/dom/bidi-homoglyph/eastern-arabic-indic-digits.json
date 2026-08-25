@@ -1,0 +1,7 @@
+{
+  "finding": "M11-T03",
+  "category": "bidi-homoglyph",
+  "describes": "eastern arabic indic digits",
+  "expectedResult": "ok",
+  "expectedText": "CAD 44.50"
+}

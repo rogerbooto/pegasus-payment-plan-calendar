@@ -1,0 +1,7 @@
+{
+  "finding": "M11-T03",
+  "category": "bidi-homoglyph",
+  "describes": "fullwidth digits",
+  "expectedResult": "ok",
+  "expectedText": "USD 37.50"
+}

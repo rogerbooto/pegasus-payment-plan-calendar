@@ -1,0 +1,8 @@
+{
+  "finding": "M11-T06/T07",
+  "category": "per-month-vs-total",
+  "describes": "a per-month amount and a count in separate, unbound nodes -- the money parser must not silently truncate the cadence suffix into a bare amount",
+  "note": "binding count+amount+cadence in one text cluster is a generic-detector/adapter responsibility, out of this lane's scope; this fixture proves the money boundary itself never launders a cadence-suffixed string into a number",
+  "expectedResult": "rejected",
+  "expectedReason": "invalid_character"
+}

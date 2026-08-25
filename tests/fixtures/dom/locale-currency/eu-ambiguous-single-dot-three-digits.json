@@ -1,0 +1,9 @@
+{
+  "finding": "M11-T02",
+  "category": "locale-currency",
+  "describes": "eu ambiguous single dot three digits",
+  "expectedResult": "rejected",
+  "expectedCents": null,
+  "expectedCurrency": null,
+  "expectedReason": "ambiguous_separators"
+}

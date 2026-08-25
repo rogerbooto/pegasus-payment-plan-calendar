@@ -13,6 +13,15 @@ export class ConfigValidationError extends Error {
   override name = "ConfigValidationError";
 }
 
+/**
+ * Thrown when a value reaching the impact engine or the checkout-confirmed
+ * ledger writer does not match what the user confirmed (T01, the Critical
+ * threat-model finding). A confidently wrong number must never compute.
+ */
+export class ConfirmationError extends Error {
+  override name = "ConfirmationError";
+}
+
 /** Thrown by scaffolded seams whose implementation has not landed yet. */
 export class NotImplementedError extends Error {
   override name = "NotImplementedError";

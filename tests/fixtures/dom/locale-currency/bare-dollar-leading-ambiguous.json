@@ -1,0 +1,9 @@
+{
+  "finding": "M11-T02",
+  "category": "locale-currency",
+  "describes": "bare dollar leading ambiguous",
+  "expectedResult": "rejected",
+  "expectedCents": null,
+  "expectedCurrency": null,
+  "expectedReason": "no_currency_marker"
+}

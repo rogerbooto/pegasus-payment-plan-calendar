@@ -1,0 +1,6 @@
+{
+  "finding": "M11-T06",
+  "category": "hidden-decoy",
+  "describes": "two visible, equal total candidates -- harmless, collapses to one",
+  "expectedSelectedText": "CAD 37.50"
+}

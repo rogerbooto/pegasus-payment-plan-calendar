@@ -1,0 +1,7 @@
+{
+  "finding": "M11-T03",
+  "category": "bidi-homoglyph",
+  "describes": "mixed digit scripts rejected",
+  "expectedResult": "rejected",
+  "expectedText": null
+}

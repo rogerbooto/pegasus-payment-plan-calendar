@@ -1,0 +1,6 @@
+{
+  "finding": "M11-T06",
+  "category": "hidden-decoy",
+  "describes": "two visible, unequal total candidates -- must degrade, never pick",
+  "expectedSelectedText": null
+}

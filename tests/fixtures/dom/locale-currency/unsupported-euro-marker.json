@@ -1,0 +1,9 @@
+{
+  "finding": "M11-T02",
+  "category": "locale-currency",
+  "describes": "unsupported euro marker",
+  "expectedResult": "rejected",
+  "expectedCents": null,
+  "expectedCurrency": null,
+  "expectedReason": "unsupported_currency"
+}

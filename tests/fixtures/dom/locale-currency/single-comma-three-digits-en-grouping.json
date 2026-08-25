@@ -1,0 +1,9 @@
+{
+  "finding": "M11-T02",
+  "category": "locale-currency",
+  "describes": "single comma three digits en grouping",
+  "expectedResult": "parsed",
+  "expectedCents": 123400,
+  "expectedCurrency": "CAD",
+  "expectedReason": null
+}

@@ -1,0 +1,9 @@
+{
+  "finding": "M11-T02",
+  "category": "locale-currency",
+  "describes": "us comma grouping dot decimal",
+  "expectedResult": "parsed",
+  "expectedCents": 123456,
+  "expectedCurrency": "USD",
+  "expectedReason": null
+}

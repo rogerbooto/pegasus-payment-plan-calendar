@@ -1,0 +1,9 @@
+{
+  "finding": "M11-T07",
+  "category": "tax-shipping-delta",
+  "describes": "4 x 37.50 = 150.00 vs the order total 163.94 (tax+shipping folded into the total) -- must be flagged, never silently reconciled",
+  "installmentCount": 4,
+  "perInstallmentCents": 3750,
+  "orderTotalCents": 16394,
+  "expectedConsistent": false
+}

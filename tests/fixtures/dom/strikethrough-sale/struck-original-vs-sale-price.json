@@ -1,0 +1,6 @@
+{
+  "finding": "M11-T06",
+  "category": "strikethrough-sale",
+  "describes": "struck-through original price beside the current sale price",
+  "expectedSelectedText": "CAD 37.50"
+}

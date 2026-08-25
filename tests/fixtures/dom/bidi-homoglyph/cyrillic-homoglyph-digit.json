@@ -1,0 +1,7 @@
+{
+  "finding": "M11-T03",
+  "category": "bidi-homoglyph",
+  "describes": "cyrillic homoglyph digit",
+  "expectedResult": "rejected",
+  "expectedText": null
+}

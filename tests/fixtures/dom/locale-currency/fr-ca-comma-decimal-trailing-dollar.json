@@ -1,0 +1,9 @@
+{
+  "finding": "M11-T02",
+  "category": "locale-currency",
+  "describes": "fr ca comma decimal trailing dollar",
+  "expectedResult": "parsed",
+  "expectedCents": 3750,
+  "expectedCurrency": "CAD",
+  "expectedReason": null
+}

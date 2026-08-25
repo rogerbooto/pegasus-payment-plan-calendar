@@ -1,0 +1,7 @@
+{
+  "finding": "M11-T03",
+  "category": "bidi-homoglyph",
+  "describes": "zwsp inside amount",
+  "expectedResult": "rejected",
+  "expectedText": null
+}

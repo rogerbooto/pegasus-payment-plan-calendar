@@ -1,0 +1,8 @@
+{
+  "finding": "M11-T01",
+  "category": "friendlier-number",
+  "describes": "a per-payment amount displayed prominently as if it were the whole obligation, beside the real order total",
+  "realOrderTotalCents": 8996,
+  "perInstallmentCents": 2249,
+  "installmentCount": 4
+}

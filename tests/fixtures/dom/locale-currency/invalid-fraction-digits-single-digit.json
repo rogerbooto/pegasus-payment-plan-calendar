@@ -1,0 +1,9 @@
+{
+  "finding": "M11-T02",
+  "category": "locale-currency",
+  "describes": "invalid fraction digits single digit",
+  "expectedResult": "rejected",
+  "expectedCents": null,
+  "expectedCurrency": null,
+  "expectedReason": "invalid_fraction_digits"
+}

@@ -1,0 +1,9 @@
+{
+  "finding": "M11-T07",
+  "category": "tax-shipping-delta",
+  "describes": "first-installment-absorbs-rounding: 3 x 33.34 = 100.02 vs total 100.00, delta 2 <= tolerance 3",
+  "installmentCount": 3,
+  "perInstallmentCents": 3334,
+  "orderTotalCents": 10000,
+  "expectedConsistent": true
+}

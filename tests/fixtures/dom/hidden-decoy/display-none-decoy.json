@@ -1,0 +1,6 @@
+{
+  "finding": "M11-T06",
+  "category": "hidden-decoy",
+  "describes": "display:none decoy total beside the real, visible total",
+  "expectedSelectedText": "CAD 37.50"
+}
