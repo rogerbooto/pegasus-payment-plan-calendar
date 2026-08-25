@@ -12,7 +12,7 @@ other end of it.
 ## Status: in development. Nothing is released yet.
 
 This repository is public from the day it started, so the code can be read as it is written. Today
-it holds a licence, this README, and not much else.
+it holds a license, this README, and not much else.
 
 - There is **no published extension**. It is not in the Chrome Web Store.
 - There is **no build you can install**, and no application code here yet to build one from.
@@ -60,18 +60,19 @@ That list is the product, not a disclaimer at the bottom of one.
 
 ## Where it works, and where it doesn't
 
-At launch it will recognise payment-plan offers on:
+At launch it will recognize payment-plan offers on:
 
-- **Shopify** checkouts
-- **Stripe-hosted** checkouts
+- **Shopify's own checkout addresses** — `checkout.shopify.com` and `shop.app`. Note: many shops
+  run their checkout on *their own* domain instead, and those are **not** covered today.
+- **Stripe-hosted** checkouts — `checkout.stripe.com`
 - **Whop**
 
-**Everywhere else — including Amazon — it will usually not recognise the checkout.** When that
-happens it says so plainly: *"We don't recognise this checkout yet."* You can then type the plan in
+**Everywhere else — including Amazon — it will usually not recognize the checkout.** When that
+happens it says so plainly: *"We don't recognize this checkout yet."* You can then type the plan in
 by hand, and the calendar works exactly the same. It will never guess.
 
 That limit is real and worth stating twice: **coverage is partial, and it will stay partial.**
-Checkouts change whenever a shop updates its site, and when one changes, this stops recognising it
+Checkouts change whenever a shop updates its site, and when one changes, this stops recognizing it
 until it is fixed and an update goes through store review. So there are two honest outcomes and no
 third one: either it reads the numbers and asks you to check them, or it says it can't and hands
 you a blank form. It will not show a number it isn't certain of. A confident wrong number, at the
@@ -124,7 +125,7 @@ checkout extension is playing an angle is now a sensible default.
 
 Three answers, none of which is "trust us":
 
-1. **The code is here.** All of it, as it's written, in public, under a licence that obliges anyone
+1. **The code is here.** All of it, as it's written, in public, under a license that obliges anyone
    distributing a modified version to publish their changes too.
 2. **It makes no network calls.** You don't have to take that on faith — the network tab settles it.
 3. **Nobody is paid when you borrow.** No commission from a shop, no fee from a lender, no
@@ -143,7 +144,7 @@ your accounts read-only and tells you what your numbers mean, not just what they
 separate, paid product. You don't need it for this to work — there is no account to make here, and
 nothing in this repository connects to it.
 
-## Licence
+## License
 
 **GPL-3.0.** The full text is in [LICENSE](LICENSE).
 
@@ -156,13 +157,13 @@ endorsed by, or connected to any of them, or to any lender.
 
 ## Contributing
 
-Issues are welcome, and the most useful one is a checkout it should recognise and doesn't — with
+Issues are welcome, and the most useful one is a checkout it should recognize and doesn't — with
 the shop and what you saw.
 
 This is built by one person alongside other work, so triage is best-effort and sometimes slow.
 That's an honest posture rather than an apology.
 
-Contributions are accepted under a contributor licence agreement. `CONTRIBUTING.md` and the CLA
+Contributions are accepted under a contributor license agreement. `CONTRIBUTING.md` and the CLA
 text will be published here before the first code lands — there are no terms to read yet, and none
 are being invented in this paragraph.
 

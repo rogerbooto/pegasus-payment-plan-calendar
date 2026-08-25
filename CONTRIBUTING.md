@@ -52,6 +52,6 @@ npm run check     # typecheck, lint, tests, build
 
 ## Licensing
 
-Contributions are accepted under a contributor licence agreement. The CLA text
+Contributions are accepted under a contributor license agreement. The CLA text
 will be published here before the first outside contribution is merged — there is
 nothing to sign yet, and no terms are being invented in this paragraph.
