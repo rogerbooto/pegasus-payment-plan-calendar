@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PlanLedger, validatePlanRecord, validateSettings } from "../../src/storage/ledger";
+import { FORBIDDEN_KEY_SUBSTRINGS, PlanLedger, validatePlanRecord, validateSettings } from "../../src/storage/ledger";
 import type { KeyValueStore } from "../../src/storage/store";
 import { StorageSchemaError } from "../../src/shared/errors";
 
@@ -39,6 +39,25 @@ describe("plan record allowlist", () => {
   it("rejects any non-allowlisted field instead of silently persisting it", () => {
     for (const extra of ["merchantName", "checkoutUrl", "cartContents", "pageDom", "authToken"]) {
       expect(() => validatePlanRecord({ ...validPlan, [extra]: "x" })).toThrow(StorageSchemaError);
+    }
+  });
+
+  // Sabotage-probe finding: every field in the test above ALSO matches a
+  // FORBIDDEN_KEY_SUBSTRINGS entry ("merchant", "url", "cart", "dom",
+  // "auth"), so deleting assertClosedFieldSet's call entirely — the actual
+  // minimum-necessary-capture guard T17 requires — still leaves every case
+  // above throwing via the belt-and-braces substring check, and the whole
+  // 283-test suite stays green. Verified by temporarily removing the
+  // assertClosedFieldSet() call from validatePlanRecord and re-running the
+  // suite. This field is deliberately chosen to match NO forbidden
+  // substring, so only the closed-allowlist check (not the substring
+  // check) can catch it — RED if assertClosedFieldSet is ever removed or
+  // bypassed, even though assertNoForbiddenKeys is untouched.
+  it("rejects a non-allowlisted field that matches no forbidden substring (isolates the allowlist guard from the substring guard)", () => {
+    for (const extra of ["nickname", "priority", "colorLabel", "note"]) {
+      expect(FORBIDDEN_KEY_SUBSTRINGS.some((f) => extra.toLowerCase().includes(f))).toBe(false);
+      expect(() => validatePlanRecord({ ...validPlan, [extra]: "x" })).toThrow(StorageSchemaError);
+      expect(() => validatePlanRecord({ ...validPlan, [extra]: "x" })).toThrow(/non-allowlisted field/);
     }
   });
 
