@@ -63,3 +63,39 @@ export function styleTag(css: string): HTMLStyleElement {
   node.textContent = css;
   return node;
 }
+
+/**
+ * Moves focus to a screen's own heading on navigation, giving it
+ * `tabindex="-1"` so it is programmatically focusable without joining the
+ * tab order. Pointer users never see a focus ring here -- the existing
+ * global `:focus-visible` rule already suppresses that for mouse/touch
+ * activation, so this deliberately does not set `outline: none`.
+ *
+ * Formerly a private function in src/popup/PopupApp.ts; moved here (edit-
+ * plan-spec §4.6) once the edit form gained a second consumer
+ * (src/overlay/ConfirmationSheet.ts's `initialFocus: "heading"` option).
+ * Behaviour is unchanged byte-for-byte from the original.
+ */
+export function moveFocusToHeading(root: HTMLElement, selector: string): void {
+  const heading = root.querySelector(selector) as HTMLElement | null;
+  if (!heading) return;
+  heading.setAttribute("tabindex", "-1");
+  heading.focus();
+}
+
+/**
+ * Builds the "already-formatted labels as .d spans, comma-separated, final
+ * period" pattern shared by three call sites (renderForm's own inline echo
+ * in ConfirmationSheet.ts, OverlayHost's dateSpans, and the popup hero's
+ * edit-saved notice) -- extracted here (edit-plan-spec §5.4) so the shape
+ * exists once. Takes already-formatted strings, never raw dates or cents,
+ * so this file stays domain-free.
+ */
+export function tokenList(labels: readonly string[]): Node[] {
+  const nodes: Node[] = [];
+  labels.forEach((label, i) => {
+    nodes.push(el("span", { className: "d", text: label }));
+    nodes.push(text(i < labels.length - 1 ? ", " : "."));
+  });
+  return nodes;
+}

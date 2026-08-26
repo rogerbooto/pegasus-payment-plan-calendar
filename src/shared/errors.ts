@@ -22,6 +22,14 @@ export class ConfirmationError extends Error {
   override name = "ConfirmationError";
 }
 
+/** Thrown when PlanLedger.updatePlan names a plan id the ledger does not hold. */
+export class PlanNotFoundError extends Error {
+  override name = "PlanNotFoundError";
+  constructor(id: string) {
+    super(`no stored plan with id "${id}"`);
+  }
+}
+
 /** Thrown by scaffolded seams whose implementation has not landed yet. */
 export class NotImplementedError extends Error {
   override name = "NotImplementedError";

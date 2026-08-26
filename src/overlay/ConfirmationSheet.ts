@@ -42,7 +42,7 @@ import { multiplyCents, type Cents } from "../shared/money";
 import { arithmeticToleranceCents, INSTALLMENT_COUNT_MAX, INSTALLMENT_COUNT_MIN } from "../shared/constants";
 import { confirmPlan, buildConfirmedPlanRecord, type ConfirmedPlanInput } from "../parser/confirmation";
 import { paymentDates } from "../impact/engine";
-import { el, clear, text } from "./dom";
+import { el, clear, moveFocusToHeading, text } from "./dom";
 import { formatMonthDay, parseMoneyInput, todayIsoDate } from "./format-helpers";
 import * as copy from "./copy";
 
@@ -106,7 +106,11 @@ function fieldHead(spec: FieldSpec): HTMLDivElement {
   });
 }
 
-function textField(spec: FieldSpec, inputAttrs: Record<string, string>): {
+function textField(
+  spec: FieldSpec,
+  inputAttrs: Record<string, string>,
+  hintOverride?: string,
+): {
   readonly wrap: HTMLDivElement;
   readonly input: HTMLInputElement;
 } {
@@ -119,7 +123,7 @@ function textField(spec: FieldSpec, inputAttrs: Record<string, string>): {
       ...(spec.placeholder ? { placeholder: spec.placeholder } : {}),
     },
   });
-  const hintText = spec.missing ? copy.FIELD_HINT_MISSING : copy.FIELD_HINT_PARSED;
+  const hintText = hintOverride ?? (spec.missing ? copy.FIELD_HINT_MISSING : copy.FIELD_HINT_PARSED);
   const wrap = el("div", {
     className: spec.missing ? "field field--missing" : "field",
     children: [
@@ -143,6 +147,25 @@ interface BuildFormOptions {
   readonly cadenceMissing: boolean;
   readonly each: FieldSpec;
   readonly firstDate: IsoDate;
+  /**
+   * When present, every field's hint text is this string instead of the
+   * default FIELD_HINT_PARSED/FIELD_HINT_MISSING/FIELD_HINT_FIRST_PAYMENT
+   * split -- those all claim a value came from a page, which the edit form
+   * (opened from the toolbar popup, no page in play) must never say.
+   * Absent, behaviour is byte-identical to before this option existed. It
+   * never changes which hints are sr-only (four stay sr-only, the
+   * first-payment hint stays visible) -- only their text.
+   */
+  readonly hintOverride?: string;
+  /** Defaults to copy.FORM_SUBMIT when absent. */
+  readonly submitLabel?: string;
+  /**
+   * Defaults to "total" (the order-total field, today's exact behaviour)
+   * when absent. "heading" moves focus to the form's own <h3> instead --
+   * used only by the edit form (edit-plan-spec §7.2), whose fields are all
+   * equally pre-filled, so no one field is the natural place to land.
+   */
+  readonly initialFocus?: "total" | "heading";
   readonly buildRecord: (values: {
     orderTotalCents: Cents;
     installmentCount: number;
@@ -177,18 +200,15 @@ function renderForm(opts: BuildFormOptions): void {
     fields.appendChild(el("p", { className: "form__sub", text: opts.sub }));
   }
 
-  const totalField = textField(opts.total, {
-    type: "text",
-    inputmode: "decimal",
-    required: "",
-  });
+  const totalField = textField(
+    opts.total,
+    { type: "text", inputmode: "decimal", required: "" },
+    opts.hintOverride,);
 
-  const countField = textField(opts.count, {
-    type: "number",
-    min: String(INSTALLMENT_COUNT_MIN),
-    max: String(INSTALLMENT_COUNT_MAX),
-    required: "",
-  });
+  const countField = textField(
+    opts.count,
+    { type: "number", min: String(INSTALLMENT_COUNT_MIN), max: String(INSTALLMENT_COUNT_MAX), required: "" },
+    opts.hintOverride,);
 
   const cadenceSelect = el("select", {
     attrs: { id: "ppc-f-cadence", "aria-describedby": "ppc-f-cadence-hint", required: "" },
@@ -208,16 +228,15 @@ function renderForm(opts: BuildFormOptions): void {
       el("p", {
         className: "hint sr-only",
         attrs: { id: "ppc-f-cadence-hint" },
-        text: opts.cadenceMissing ? copy.FIELD_HINT_MISSING : copy.FIELD_HINT_PARSED,
+        text: opts.hintOverride ?? (opts.cadenceMissing ? copy.FIELD_HINT_MISSING : copy.FIELD_HINT_PARSED),
       }),
     ],
   });
 
-  const eachField = textField(opts.each, {
-    type: "text",
-    inputmode: "decimal",
-    required: "",
-  });
+  const eachField = textField(
+    opts.each,
+    { type: "text", inputmode: "decimal", required: "" },
+    opts.hintOverride,);
 
   // Rows regrouped for footprint only -- DOM/tab order is unchanged:
   // total, count, cadence, each, first (§2.3 of the layout spec).
@@ -241,7 +260,11 @@ function renderForm(opts: BuildFormOptions): void {
       children: [
         fieldHead(firstSpec),
         firstInput,
-        el("p", { className: "hint", attrs: { id: "ppc-f-first-hint" }, text: copy.FIELD_HINT_FIRST_PAYMENT }),
+        el("p", {
+          className: "hint",
+          attrs: { id: "ppc-f-first-hint" },
+          text: opts.hintOverride ?? copy.FIELD_HINT_FIRST_PAYMENT,
+        }),
       ],
     }),);
 
@@ -266,7 +289,11 @@ function renderForm(opts: BuildFormOptions): void {
   let errorNote: HTMLParagraphElement | null = null;
 
   const actions = el("div", { className: "actions form__actions" });
-  const submitBtn = el("button", { className: "btn btn--primary", attrs: { type: "submit" }, text: copy.FORM_SUBMIT });
+  const submitBtn = el("button", {
+    className: "btn btn--primary",
+    attrs: { type: "submit" },
+    text: opts.submitLabel ?? copy.FORM_SUBMIT,
+  });
   const cancelBtn = el("button", {
     className: "btn btn--ghost",
     attrs: { type: "button" },
@@ -371,12 +398,32 @@ function renderForm(opts: BuildFormOptions): void {
 
   form.addEventListener("submit", (e) => {
     e.preventDefault();
+    // F2: a write for this form is already in flight -- a second Enter/
+    // click before it resolves must be a no-op, not a second addPlan/
+    // updatePlan call. See the `submitBtn.disabled = true` below, which is
+    // the only thing that can make this branch true.
+    if (submitBtn.disabled) return;
+
     const totalCents = parseMoneyInput(totalField.input.value, "orderTotalCents");
     const eachCents = parseMoneyInput(eachField.input.value, "perInstallmentCents");
     const count = parseInt(countField.input.value, 10);
     const cadence = currentCadence();
     const first = firstInput.value;
-    if (totalCents === null || eachCents === null || !cadence || !Number.isSafeInteger(count)) return;
+    // F7: firstPaymentDate used to reach buildRecord/validatePlanRecord on
+    // nothing but native <input type="date"> constraint validation. If
+    // that assumption ever breaks, an empty/partial date surfaced as
+    // SAVE_FAILED's generic "your browser storage may be full" line --
+    // the wrong diagnosis for a date problem. Same test updateEchoAndNote
+    // already applies to the preview, applied here to the write path too.
+    if (
+      totalCents === null ||
+      eachCents === null ||
+      !cadence ||
+      !Number.isSafeInteger(count) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(first)
+    ) {
+      return;
+    }
 
     let record: PaymentPlanRecord;
     try {
@@ -387,18 +434,37 @@ function renderForm(opts: BuildFormOptions): void {
       return;
     }
 
+    // F2 (edit-plan-spec §10): double-pressing this button used to be able
+    // to add a plan twice (two overlapping addPlan calls, each its own
+    // read-then-write-whole-array) or lose one (the second read landing
+    // before the first write). Disabling the one control that starts a
+    // write closes the window; it is re-enabled only on a rejection, so a
+    // real retry after a failed save is still possible. The edit path
+    // does not need this for correctness (updatePlan splices the same id
+    // in place, so a duplicate call is idempotent by construction) but is
+    // not exempted from it either -- it is harmless there too.
+    submitBtn.disabled = true;
     const result = opts.onConfirm(record);
     if (result && typeof (result as Promise<void>).then === "function") {
       (result as Promise<void>).catch(() => {
+        submitBtn.disabled = false;
         if (errorNote) errorNote.remove();
         errorNote = el("p", { className: "note", attrs: { role: "alert" }, text: copy.SAVE_FAILED });
         form.insertBefore(errorNote, actions);
       });
+    } else {
+      // A synchronous (non-Promise) onConfirm has no pending write to
+      // guard and no rejection path to re-enable from -- leave it enabled.
+      submitBtn.disabled = false;
     }
   });
 
   container.appendChild(form);
-  totalField.input.focus();
+  if (opts.initialFocus === "heading") {
+    moveFocusToHeading(container, `#${formHeadingId}`);
+  } else {
+    totalField.input.focus();
+  }
 }
 
 function candidateFieldValue(cents: Cents, currency: Currency): string {
@@ -531,6 +597,137 @@ export function renderManualEntrySheet(container: HTMLElement, props: ManualEntr
       });
     },
     onConfirm: props.onConfirm,
+    onCancel: props.onCancel,
+  });
+}
+
+export interface EditChangeSummary {
+  /** True when any of the five user-editable values differs from the stored plan. */
+  readonly valuesChanged: boolean;
+  /** True when the computed payment dates differ from the stored plan's.
+   *  Always false when valuesChanged is false. */
+  readonly datesChanged: boolean;
+}
+
+export interface EditPlanSheetProps {
+  /** The stored record being corrected. Prefills are authoritative, not suggestions. */
+  readonly plan: PaymentPlanRecord;
+  /** May reject — the sheet then shows SAVE_FAILED inline, exactly as the other two do. */
+  readonly onSave: (updated: PaymentPlanRecord, changed: EditChangeSummary) => void | Promise<void>;
+  readonly onCancel: () => void;
+}
+
+/**
+ * Builds the corrected record for `PlanLedger.updatePlan` (edit-plan-spec
+ * §4.3). Requires a `ConfirmedPlanInput` for the same reason
+ * buildManualPlanRecord/buildConfirmedPlanRecord do: an edited plan passes
+ * the identical numeric gate as a new one. Only the provenance tag and the
+ * carried-through id/createdAt differ.
+ *
+ * All nine fields are listed literally, matching its two siblings, so the
+ * closed allowlist (assertClosedFieldSet, src/storage/ledger.ts) is
+ * satisfied by construction — a tenth field would be a compile error in
+ * all three builders at once rather than a runtime "plan record is missing
+ * required field" in only one of them.
+ */
+function buildEditedPlanRecord(
+  confirmed: ConfirmedPlanInput,
+  original: PaymentPlanRecord,
+  firstPaymentDate: IsoDate,): PaymentPlanRecord {
+  const valuesChanged =
+    confirmed.orderTotalCents !== original.orderTotalCents ||
+    confirmed.installmentCount !== original.installmentCount ||
+    confirmed.cadence !== original.cadence ||
+    confirmed.perInstallmentCents !== original.perInstallmentCents ||
+    firstPaymentDate !== original.firstPaymentDate;
+  return {
+    id: original.id, // §1.2 — never regenerated
+    createdAt: original.createdAt, // §1.2 — never rewritten
+    source: valuesChanged ? "manual" : original.source, // §1.1
+    currency: confirmed.currency,
+    orderTotalCents: confirmed.orderTotalCents,
+    installmentCount: confirmed.installmentCount,
+    cadence: confirmed.cadence,
+    perInstallmentCents: confirmed.perInstallmentCents,
+    firstPaymentDate,
+  };
+}
+
+/**
+ * The §1.1 invariant, computed once here and handed to onSave — the only
+ * place this comparison exists; a caller never re-derives it. `datesChanged`
+ * is short-circuited to false whenever `valuesChanged` is false (test #19's
+ * "valuesChanged: false implies datesChanged: false"), which also means a
+ * no-op save never bothers computing paymentDates() twice for nothing.
+ */
+function computeEditChangeSummary(original: PaymentPlanRecord, next: PaymentPlanRecord): EditChangeSummary {
+  const valuesChanged =
+    next.orderTotalCents !== original.orderTotalCents ||
+    next.installmentCount !== original.installmentCount ||
+    next.cadence !== original.cadence ||
+    next.perInstallmentCents !== original.perInstallmentCents ||
+    next.firstPaymentDate !== original.firstPaymentDate;
+  const datesChanged = valuesChanged && !datesEqual(paymentDates(original), paymentDates(next));
+  return { valuesChanged, datesChanged };
+}
+
+function datesEqual(a: readonly IsoDate[], b: readonly IsoDate[]): boolean {
+  return a.length === b.length && a.every((d, i) => d === b[i]);
+}
+
+/**
+ * A third export sharing renderForm wholesale (edit-plan-spec §4.1),
+ * deliberately NOT an optional `editing?: PaymentPlanRecord` widening
+ * ManualEntrySheetProps: that sheet's documented contract is "prefills are
+ * suggestions, never presented as authoritative" — an edit's prefills are
+ * the exact opposite, and overloading one function with two contradictory
+ * prefill semantics is how a hint string ends up lying.
+ */
+export function renderEditPlanSheet(container: HTMLElement, props: EditPlanSheetProps): void {
+  const { plan } = props;
+
+  renderForm({
+    container,
+    leadLine: null,
+    title: copy.FORM_TITLE_EDIT,
+    // §4.2 — the sub slot, not the lead slot: .form__sub costs 15px less
+    // than .form__lead's quote-bar treatment, and an edit form reads
+    // nothing off any page, so the lead's "here is something we read"
+    // framing would be wrong here regardless of cost.
+    sub: copy.FORM_SUB_EDIT,
+    currency: plan.currency,
+    total: {
+      id: "ppc-f-total",
+      label: copy.FIELD_LABEL_TOTAL,
+      initial: candidateFieldValue(plan.orderTotalCents, plan.currency),
+      // §4.2 — always false: nothing is missing on an edit.
+      missing: false,
+    },
+    count: {
+      id: "ppc-f-count",
+      label: copy.FIELD_LABEL_COUNT,
+      initial: String(plan.installmentCount),
+      missing: false,
+    },
+    cadenceInitial: plan.cadence,
+    cadenceMissing: false,
+    each: {
+      id: "ppc-f-each",
+      label: copy.FIELD_LABEL_EACH,
+      initial: candidateFieldValue(plan.perInstallmentCents, plan.currency),
+      missing: false,
+    },
+    // §4.2 — the stored date, never today: an edit form must never suggest
+    // "today" is where this plan starts.
+    firstDate: plan.firstPaymentDate,
+    hintOverride: copy.EDIT_FIELD_HINT,
+    submitLabel: copy.FORM_SUBMIT_EDIT,
+    initialFocus: "heading",
+    buildRecord: (values, firstPaymentDate) => {
+      const confirmed = confirmPlan({ confirmed: true, values: { ...values, currency: plan.currency } });
+      return buildEditedPlanRecord(confirmed, plan, firstPaymentDate);
+    },
+    onConfirm: (updated) => props.onSave(updated, computeEditChangeSummary(plan, updated)),
     onCancel: props.onCancel,
   });
 }

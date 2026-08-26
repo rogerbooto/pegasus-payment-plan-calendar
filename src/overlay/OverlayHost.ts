@@ -30,7 +30,7 @@ import { createDomPageProbe } from "../engine/dom-page-probe";
 import { extractionCore } from "../engine/extraction-core";
 import { readOrderTotalSuggestion } from "../engine/order-total-suggestion";
 import { renderConfirmationSheet, renderManualEntrySheet } from "./ConfirmationSheet";
-import { el, clear, text, styleTag } from "./dom";
+import { el, clear, text, styleTag, tokenList } from "./dom";
 import { applyThemeAttribute, OVERLAY_CSS, resolvePersistedTheme } from "./theme";
 import { formatMonthDay, formatWeekday, todayIsoDate } from "./format-helpers";
 import * as copy from "./copy";
@@ -391,13 +391,8 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
     return true;
   }
 
-  function dateSpans(dates: readonly string[]): (Node | null)[] {
-    const nodes: (Node | null)[] = [];
-    dates.forEach((d, i) => {
-      nodes.push(el("span", { className: "d", text: formatMonthDay(d) }));
-      nodes.push(text(i < dates.length - 1 ? ", " : "."));
-    });
-    return nodes;
+  function dateSpans(dates: readonly string[]): Node[] {
+    return tokenList(dates.map((d) => formatMonthDay(d)));
   }
 
   function renderImpactHero(body: HTMLElement, count: number, amountText: string, dates: readonly string[]): void {

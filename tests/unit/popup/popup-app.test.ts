@@ -7,6 +7,8 @@ import { PlanLedger } from "../../../src/storage/ledger";
 import { createFakeStore } from "../overlay/test-helpers";
 import { markInviteDismissed, markViewedNext30 } from "../../../src/popup/usage-tracking";
 import { LAUNCH_NOTIFY_URL, MARKETING_HOST } from "../../../src/popup/copy";
+import * as overlayCopy from "../../../src/overlay/copy";
+import { PlanNotFoundError } from "../../../src/shared/errors";
 import type { PaymentPlanRecord } from "../../../src/shared/types";
 import { assertCents } from "../../../src/shared/money";
 
@@ -36,6 +38,52 @@ function samplePlan(id = "11111111-1111-4111-8111-111111111111"): PaymentPlanRec
 
 function flush(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function planWith(overrides: Partial<PaymentPlanRecord> = {}): PaymentPlanRecord {
+  return { ...samplePlan(), ...overrides };
+}
+
+function fillEditForm(el: HTMLElement, values: Partial<{ total: string; count: string; cadence: string; each: string; first: string }>): void {
+  if (values.total !== undefined) {
+    const input = el.querySelector("#ppc-f-total") as HTMLInputElement;
+    input.value = values.total;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  if (values.count !== undefined) {
+    const input = el.querySelector("#ppc-f-count") as HTMLInputElement;
+    input.value = values.count;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  if (values.cadence !== undefined) {
+    const select = el.querySelector("#ppc-f-cadence") as HTMLSelectElement;
+    select.value = values.cadence;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  if (values.each !== undefined) {
+    const input = el.querySelector("#ppc-f-each") as HTMLInputElement;
+    input.value = values.each;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  if (values.first !== undefined) {
+    const input = el.querySelector("#ppc-f-first") as HTMLInputElement;
+    input.value = values.first;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+}
+
+function submitForm(el: HTMLElement): void {
+  (el.querySelector("form") as HTMLFormElement).dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+}
+
+function editButtons(el: HTMLElement): HTMLButtonElement[] {
+  return [...el.querySelectorAll(".rows li button")].filter(
+    (b) => b.textContent?.startsWith(overlayCopy.EDIT_ACTION_SHORT),) as HTMLButtonElement[];
+}
+
+function removeButtons(el: HTMLElement): HTMLButtonElement[] {
+  return [...el.querySelectorAll(".rows li button")].filter(
+    (b) => b.textContent?.startsWith(overlayCopy.REMOVE_ACTION_SHORT),) as HTMLButtonElement[];
 }
 
 describe("PopupApp — first run gate", () => {
@@ -756,5 +804,322 @@ describe("PopupApp — email invite (link-out, never a field)", () => {
     await createPopupApp(el, { store, today: () => "2026-06-01", marketingHostConfigured: true }).init();
 
     expect(el.querySelector(".invite")).toBeNull();
+  });
+});
+
+// edit-plan-spec.md §9.5 — the popup plan list, the edit screen, and the
+// generalized hero notice.
+describe("PopupApp — the plan list (edit-plan-spec §3)", () => {
+  it("item 26 — zero plans: no list heading, no Edit control, POPUP_EMPTY_LEDGER still renders", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false } });
+    const el = root();
+    await createPopupApp(el, { store }).init();
+
+    expect(el.textContent).not.toContain(overlayCopy.PLANS_LIST_HEADING);
+    expect(editButtons(el)).toHaveLength(0);
+    expect(el.textContent).toContain(overlayCopy.POPUP_EMPTY_LEDGER);
+  });
+
+  it("item 27 — two plans render two rows, ordered by firstPaymentDate ascending, each Edit's accessible name carries its own date and amount", async () => {
+    const later = planWith({ id: "later", firstPaymentDate: "2026-09-02", perInstallmentCents: assertCents(5000, "each") });
+    const earlier = planWith({ id: "earlier", firstPaymentDate: "2026-08-26", perInstallmentCents: assertCents(3750, "each") });
+    // Stored later-first, on purpose -- the row order must come from the
+    // date, not from storage order.
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [later, earlier] });
+    const el = root();
+    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+
+    const rows = [...el.querySelectorAll(".rows li")];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.querySelector(".date")?.textContent).toBe("Aug 26");
+    expect(rows[1]?.querySelector(".date")?.textContent).toBe("Sep 2");
+
+    const edits = editButtons(el);
+    expect(edits).toHaveLength(2);
+    expect(edits[0]?.textContent).toContain("Aug 26");
+    expect(edits[0]?.textContent).toContain("$37.50");
+    expect(edits[1]?.textContent).toContain("Sep 2");
+    expect(edits[1]?.textContent).toContain("$50.00");
+  });
+
+  it("item 28 — two plans sharing a first-payment date both render, in stable storage order, and their Edit names differ by amount", async () => {
+    const first = planWith({ id: "first-stored", firstPaymentDate: "2026-08-26", perInstallmentCents: assertCents(3750, "each") });
+    const second = planWith({ id: "second-stored", firstPaymentDate: "2026-08-26", perInstallmentCents: assertCents(5000, "each") });
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [first, second] });
+    const el = root();
+    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+
+    const rows = [...el.querySelectorAll(".rows li")];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.querySelector(".date")?.textContent).toBe("Aug 26");
+    expect(rows[1]?.querySelector(".date")?.textContent).toBe("Aug 26");
+
+    const edits = editButtons(el);
+    expect(edits[0]?.textContent).toContain("$37.50");
+    expect(edits[1]?.textContent).toContain("$50.00");
+  });
+
+  it("item 29 — clicking the SECOND row's Edit opens the form prefilled with the SECOND plan's values (targeting)", async () => {
+    const firstPlan = planWith({ id: "first-id", firstPaymentDate: "2026-08-01", orderTotalCents: assertCents(6000, "t"), perInstallmentCents: assertCents(1500, "e") });
+    const secondPlan = planWith({ id: "second-id", firstPaymentDate: "2026-09-01", orderTotalCents: assertCents(9000, "t"), perInstallmentCents: assertCents(2250, "e") });
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [firstPlan, secondPlan] });
+    const el = root();
+    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+
+    const edits = editButtons(el);
+    expect(edits).toHaveLength(2);
+    edits[1]?.click();
+    await flush();
+
+    expect((el.querySelector("#ppc-f-total") as HTMLInputElement).value).toBe("$90.00");
+    expect((el.querySelector("#ppc-f-each") as HTMLInputElement).value).toBe("$22.50");
+    expect((el.querySelector("#ppc-f-first") as HTMLInputElement).value).toBe("2026-09-01");
+  });
+});
+
+describe("PopupApp — the edit screen and the hero notice (edit-plan-spec §4/§5)", () => {
+  it("item 30 — Cancel returns to the hero, storage is bit-identical, and no notice is rendered", async () => {
+    const plan = planWith();
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [plan] });
+    const el = root();
+    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+
+    editButtons(el)[0]?.click();
+    await flush();
+    fillEditForm(el, { total: "$999.00" });
+
+    const cancelBtn = [...el.querySelectorAll("button")].find((b) => b.textContent === "Cancel") as HTMLButtonElement;
+    cancelBtn.click();
+    await flush();
+
+    expect(el.querySelector('[role="status"]')).toBeNull();
+    const stored = await store.get(["plans"]);
+    expect(stored.plans).toEqual([plan]);
+  });
+
+  it("item 31 — saving a date change: storage holds the new date + same id/createdAt + source: manual; the hero renders EDIT_SAVED_DATES + the new dates; the notice is document.activeElement", async () => {
+    const plan = planWith({ source: "checkout_confirmed", firstPaymentDate: "2026-08-01" });
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [plan] });
+    const el = root();
+    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+
+    editButtons(el)[0]?.click();
+    await flush();
+    fillEditForm(el, { first: "2026-09-01" });
+    submitForm(el);
+    await flush();
+
+    const stored = await store.get(["plans"]);
+    const savedPlans = stored.plans as PaymentPlanRecord[];
+    expect(savedPlans).toHaveLength(1);
+    expect(savedPlans[0]?.firstPaymentDate).toBe("2026-09-01");
+    expect(savedPlans[0]?.id).toBe(plan.id);
+    expect(savedPlans[0]?.createdAt).toBe(plan.createdAt);
+    expect(savedPlans[0]?.source).toBe("manual");
+
+    const status = el.querySelector('[role="status"]');
+    expect(status?.textContent).toContain(overlayCopy.EDIT_SAVED_DATES);
+    expect(document.activeElement).toBe(status);
+  });
+
+  it("item 32 — saving an amount-only change that moves no date renders EDIT_SAVED_NO_DATE_CHANGE", async () => {
+    // count x each = 4 x 1500 = 6000 = orderTotalCents already -- editing
+    // the total alone changes no computed payment date.
+    const plan = planWith({ orderTotalCents: assertCents(6000, "t"), installmentCount: 4, perInstallmentCents: assertCents(1500, "e") });
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [plan] });
+    const el = root();
+    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+
+    editButtons(el)[0]?.click();
+    await flush();
+    fillEditForm(el, { total: "$120.00" });
+    submitForm(el);
+    await flush();
+
+    const status = el.querySelector('[role="status"]');
+    expect(status?.textContent).toBe(overlayCopy.EDIT_SAVED_NO_DATE_CHANGE);
+  });
+
+  it("item 33 — saving with nothing changed renders EDIT_NO_CHANGE and calls store.set zero times", async () => {
+    const plan = planWith();
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [plan] });
+    const setSpy = vi.spyOn(store, "set");
+    const el = root();
+    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+
+    setSpy.mockClear();
+    editButtons(el)[0]?.click();
+    await flush();
+    submitForm(el);
+    await flush();
+
+    expect(el.querySelector('[role="status"]')?.textContent).toBe(overlayCopy.EDIT_NO_CHANGE);
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+
+  it("item 34 — the notice is transient: navigating to Settings and back clears it, and a fresh init() against the same store never shows it", async () => {
+    const plan = planWith();
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [plan] });
+    const el = root();
+    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+
+    editButtons(el)[0]?.click();
+    await flush();
+    fillEditForm(el, { first: "2026-09-05" });
+    submitForm(el);
+    await flush();
+    expect(el.querySelector('[role="status"]')).not.toBeNull();
+
+    (el.querySelector('[aria-label="Settings"]') as HTMLButtonElement).click();
+    await flush();
+    (el.querySelector('[aria-label="Close settings"]') as HTMLButtonElement).click();
+    await flush();
+    expect(el.querySelector('[role="status"]')).toBeNull();
+
+    const el2 = root();
+    await createPopupApp(el2, { store, today: () => "2026-06-01" }).init();
+    expect(el2.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it("item 35 — the founder's same-day case: editing one of two same-day plans off that date changes the Next-30 count/total, and both rows still render", async () => {
+    const a = planWith({ id: "plan-a", firstPaymentDate: "2026-08-26", perInstallmentCents: assertCents(3750, "e"), orderTotalCents: assertCents(15000, "t"), installmentCount: 4, cadence: "BIWEEKLY" });
+    const b = planWith({ id: "plan-b", firstPaymentDate: "2026-08-26", perInstallmentCents: assertCents(5000, "e"), orderTotalCents: assertCents(20000, "t"), installmentCount: 4, cadence: "BIWEEKLY" });
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [a, b] });
+    const el = root();
+    await createPopupApp(el, { store, today: () => "2026-08-01" }).init();
+
+    const summaryBefore = el.querySelector(".summary")?.textContent;
+
+    editButtons(el)[1]?.click(); // plan-b, the second row
+    await flush();
+    fillEditForm(el, { first: "2026-09-10" });
+    submitForm(el);
+    await flush();
+
+    const summaryAfter = el.querySelector(".summary")?.textContent;
+    expect(summaryAfter).not.toBe(summaryBefore);
+    expect([...el.querySelectorAll(".rows li")]).toHaveLength(2);
+  });
+
+  it("item 36 — updatePlan rejecting with PlanNotFoundError renders EDIT_TARGET_GONE on the hero, and the list re-reads from storage", async () => {
+    const plan = planWith();
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [plan] });
+    const ledger = new PlanLedger(store);
+    vi.spyOn(ledger, "updatePlan").mockRejectedValueOnce(new PlanNotFoundError(plan.id));
+    const el = root();
+    await createPopupApp(el, { store, ledger, today: () => "2026-06-01" }).init();
+
+    editButtons(el)[0]?.click();
+    await flush();
+    fillEditForm(el, { first: "2026-09-05" });
+    submitForm(el);
+    await flush();
+
+    expect(el.querySelector('[role="status"]')?.textContent).toBe(overlayCopy.EDIT_TARGET_GONE);
+  });
+
+  it("item 37 — a rejection for any other reason leaves the user ON THE FORM with SAVE_FAILED, and their typing intact", async () => {
+    const plan = planWith();
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [plan] });
+    const ledger = new PlanLedger(store);
+    vi.spyOn(ledger, "updatePlan").mockRejectedValueOnce(new Error("storage full"));
+    const el = root();
+    await createPopupApp(el, { store, ledger, today: () => "2026-06-01" }).init();
+
+    editButtons(el)[0]?.click();
+    await flush();
+    fillEditForm(el, { first: "2026-09-05" });
+    submitForm(el);
+    await flush();
+
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("didn't save");
+    expect((el.querySelector("#ppc-f-first") as HTMLInputElement).value).toBe("2026-09-05");
+    // Still on the form, not back on the hero.
+    expect(el.querySelector("h3")?.textContent).toBe(overlayCopy.FORM_TITLE_EDIT);
+  });
+
+  it("item 38 — the tab-surface primary-button flip does NOT fire for an edit", async () => {
+    const plan = planWith();
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [plan] });
+    const el = root();
+    await createPopupApp(el, { store, surface: "tab", today: () => "2026-06-01" }).init();
+
+    editButtons(el)[0]?.click();
+    await flush();
+    fillEditForm(el, { first: "2026-09-05" });
+    submitForm(el);
+    await flush();
+
+    const addBtn = [...el.querySelectorAll("button")].find((b) => b.textContent === "Add a plan");
+    expect(addBtn?.className).toContain("btn--primary");
+    expect(el.querySelectorAll(".btn--primary").length).toBe(1);
+  });
+});
+
+// Per-row Remove: founder-decided (§11.1 revisited), not in the spec's own
+// pre-cleared build. Designed to mirror the spec's own §3.4 disambiguation
+// pattern and the overlay's existing REMOVED_STATUS/REMOVED_UNDO undo.
+describe("PopupApp — per-row Remove (founder-decided; edit-plan-spec §11.1 revisited)", () => {
+  it("removes the RIGHT plan when two rows exist (targeting)", async () => {
+    const keep = planWith({ id: "keep-me", firstPaymentDate: "2026-08-01" });
+    const drop = planWith({ id: "drop-me", firstPaymentDate: "2026-09-01" });
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [keep, drop] });
+    const el = root();
+    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+
+    const removes = removeButtons(el);
+    expect(removes).toHaveLength(2);
+    removes[1]?.click(); // "drop-me" is the second row (later date)
+    await flush();
+
+    const stored = await store.get(["plans"]);
+    const remaining = stored.plans as PaymentPlanRecord[];
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.id).toBe("keep-me");
+  });
+
+  it("renders REMOVED_STATUS with an 'Add it back' undo, focuses the notice, and the undo re-adds the SAME plan (same id)", async () => {
+    const plan = planWith({ id: "removable" });
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [plan] });
+    const el = root();
+    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+
+    removeButtons(el)[0]?.click();
+    await flush();
+
+    const status = el.querySelector('[role="status"]');
+    expect(status?.textContent).toContain(overlayCopy.REMOVED_STATUS);
+    expect(document.activeElement).toBe(status);
+    expect((await store.get(["plans"])).plans).toEqual([]);
+
+    const undoBtn = [...el.querySelectorAll("button")].find((b) => b.textContent === overlayCopy.REMOVED_UNDO) as HTMLButtonElement;
+    undoBtn.click();
+    await flush();
+
+    const restored = (await store.get(["plans"])).plans as PaymentPlanRecord[];
+    expect(restored).toHaveLength(1);
+    expect(restored[0]?.id).toBe("removable");
+  });
+
+  it("the Remove control's accessible name carries the row's own date and amount, disambiguating two same-day plans the same way Edit's does", async () => {
+    const a = planWith({ id: "a", firstPaymentDate: "2026-08-26", perInstallmentCents: assertCents(3750, "e") });
+    const b = planWith({ id: "b", firstPaymentDate: "2026-08-26", perInstallmentCents: assertCents(5000, "e") });
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [a, b] });
+    const el = root();
+    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+
+    const removes = removeButtons(el);
+    expect(removes[0]?.textContent).toContain("$37.50");
+    expect(removes[1]?.textContent).toContain("$50.00");
+  });
+
+  it("a rendered plan row's Remove targets are all 44px-minimum .btn--link controls (WCAG 2.5.8 / the codebase's existing target-size convention)", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [planWith()] });
+    const el = root();
+    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+
+    for (const btn of [...editButtons(el), ...removeButtons(el)]) {
+      expect(btn.className).toContain("btn--link");
+    }
   });
 });

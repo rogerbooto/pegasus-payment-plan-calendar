@@ -13,7 +13,7 @@
  * allowlist (a validator here is meaningless if a second, unvalidated
  * write path exists elsewhere for a key this file doesn't know about).
  */
-import { StorageSchemaError } from "../shared/errors";
+import { PlanNotFoundError, StorageSchemaError } from "../shared/errors";
 import { assertPositiveCents } from "../shared/money";
 import {
   INSTALLMENT_COUNT_MAX,
@@ -305,6 +305,33 @@ export class PlanLedger {
       schemaVersion: STORAGE_SCHEMA_VERSION,
       plans: [...existing, record],
     });
+    return record;
+  }
+
+  /**
+   * The real update path (edit-plan-spec §1.2): one read-modify-write and
+   * ONE `store.set`, splicing the corrected record in at its existing
+   * index -- never remove-then-add, which would be two writes with a
+   * window in between where the plan does not exist at all (a quota
+   * rejection or a closed popup in that window would lose it outright),
+   * would churn `id`/`createdAt`, and would move the row to the end of the
+   * array (user-visible once a list exists, and it would destroy the
+   * stable tie-break two plans sharing a first-payment date depend on).
+   * `raw` must be a COMPLETE record -- validatePlanRecord's closed
+   * allowlist rejects a missing field exactly as loudly as an unknown one,
+   * so there is no partial-patch overload here (unlike updateSettings):
+   * the edit form always knows all nine fields, and a merge helper would
+   * only be an unused affordance for a future call site to write a
+   * half-record.
+   */
+  async updatePlan(raw: unknown): Promise<PaymentPlanRecord> {
+    const record = validatePlanRecord(raw);
+    const existing = await this.listPlans();
+    const index = existing.findIndex((p) => p.id === record.id);
+    if (index < 0) throw new PlanNotFoundError(record.id);
+    const plans = [...existing];
+    plans[index] = record;
+    await this.store.set({ schemaVersion: STORAGE_SCHEMA_VERSION, plans });
     return record;
   }
 

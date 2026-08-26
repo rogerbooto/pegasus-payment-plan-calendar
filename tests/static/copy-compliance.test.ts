@@ -443,6 +443,101 @@ async function collectAllRenderedCopy(): Promise<string[]> {
     collected.push(...collectUserFacingStrings(root));
   }
 
+  // --- edit-plan-spec.md §8.1: the popup plan list, the edit form, and
+  // every HeroNotice outcome (four spec'd, plus the founder-added
+  // "removed" one) -- rendered through the real click path, never a
+  // hand-picked copy of the strings. Minimum additions per §8.1: a hero
+  // with >= 2 plans; a click through Edit into the form; and each notice.
+  //
+  // document.body.replaceChildren() first: the earlier PopupApp blocks
+  // above each append their own `root` without removing the previous one,
+  // and jsdom's ID-selector fast path can resolve `root.querySelector
+  // ("#id")` against a same-id element in an EARLIER root still attached
+  // to document.body, not the one inside this block's own subtree --
+  // confirmation-sheet.test.ts's own beforeEach documents this exact
+  // jsdom quirk. Confirmed by reproduction while building this block.
+  document.body.replaceChildren();
+  {
+    const planA: PaymentPlanRecord = {
+      id: "44444444-4444-4444-8444-444444444444",
+      createdAt: "2026-06-01",
+      source: "checkout_confirmed",
+      currency: "CAD",
+      orderTotalCents: assertCents(15000, "total"),
+      installmentCount: 4,
+      cadence: "BIWEEKLY",
+      perInstallmentCents: assertCents(3750, "each"),
+      firstPaymentDate: "2026-08-26",
+    };
+    const planB: PaymentPlanRecord = {
+      id: "55555555-5555-4555-8555-555555555555",
+      createdAt: "2026-06-01",
+      source: "manual",
+      currency: "CAD",
+      orderTotalCents: assertCents(20000, "total"),
+      installmentCount: 4,
+      cadence: "MONTHLY",
+      perInstallmentCents: assertCents(5000, "each"),
+      firstPaymentDate: "2026-08-26",
+    };
+    const store = memoryStore({ settings: { checkoutReadingEnabled: false }, plans: [planA, planB] });
+    const ledger = new PlanLedger(store);
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    await createPopupApp(root, { store, ledger, today: () => "2026-06-01" }).init();
+    // The list heading + two rows, each with an Edit and a Remove control
+    // (PLANS_LIST_HEADING, EDIT_ACTION_SHORT, REMOVE_ACTION_SHORT,
+    // editRowLabelSuffix, planRowSummary).
+    collected.push(...collectUserFacingStrings(root));
+
+    const editButtons = () => [...root.querySelectorAll(".rows li button")].filter((b) => b.textContent?.startsWith("Edit"));
+    (editButtons()[0] as HTMLButtonElement | undefined)?.click();
+    await flush();
+    // The edit form itself (FORM_TITLE_EDIT, FORM_SUB_EDIT, EDIT_FIELD_HINT,
+    // FORM_SUBMIT_EDIT, FORM_CANCEL).
+    collected.push(...collectUserFacingStrings(root));
+
+    // A date edit -> the "edited, dates moved" notice (EDIT_SAVED_DATES +
+    // the new dates as .d spans).
+    (root.querySelector("#ppc-f-first") as HTMLInputElement).value = "2026-09-09";
+    (root.querySelector("form") as HTMLFormElement).dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flush();
+    collected.push(...collectUserFacingStrings(root));
+
+    // An amount-only edit that moves no date -> EDIT_SAVED_NO_DATE_CHANGE.
+    (editButtons()[0] as HTMLButtonElement | undefined)?.click();
+    await flush();
+    const totalInput = root.querySelector("#ppc-f-total") as HTMLInputElement;
+    totalInput.value = "$999.00";
+    totalInput.dispatchEvent(new Event("input", { bubbles: true }));
+    (root.querySelector("form") as HTMLFormElement).dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flush();
+    collected.push(...collectUserFacingStrings(root));
+
+    // A no-op save -> EDIT_NO_CHANGE.
+    (editButtons()[0] as HTMLButtonElement | undefined)?.click();
+    await flush();
+    (root.querySelector("form") as HTMLFormElement).dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flush();
+    collected.push(...collectUserFacingStrings(root));
+
+    // The target-gone case: the plan is removed from storage out from under
+    // an already-open edit form, then that form is submitted.
+    (editButtons()[0] as HTMLButtonElement | undefined)?.click();
+    await flush();
+    await ledger.removePlan((await ledger.listPlans())[0]?.id ?? "");
+    (root.querySelector("form") as HTMLFormElement).dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flush();
+    // EDIT_TARGET_GONE.
+    collected.push(...collectUserFacingStrings(root));
+
+    // Per-row Remove (founder-decided) -> REMOVED_STATUS + REMOVED_UNDO.
+    const removeButtons = () => [...root.querySelectorAll(".rows li button")].filter((b) => b.textContent?.startsWith("Remove"));
+    (removeButtons()[0] as HTMLButtonElement | undefined)?.click();
+    await flush();
+    collected.push(...collectUserFacingStrings(root));
+  }
+
   document.body.replaceChildren();
   return collected;
 }

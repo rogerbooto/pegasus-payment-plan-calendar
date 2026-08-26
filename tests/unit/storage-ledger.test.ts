@@ -12,7 +12,7 @@ import {
 } from "../../src/storage/ledger";
 import type { Settings } from "../../src/storage/ledger";
 import type { KeyValueStore } from "../../src/storage/store";
-import { StorageSchemaError } from "../../src/shared/errors";
+import { PlanNotFoundError, StorageSchemaError } from "../../src/shared/errors";
 
 function memoryStore(): KeyValueStore & { data: Record<string, unknown> } {
   const data: Record<string, unknown> = {};
@@ -28,6 +28,32 @@ function memoryStore(): KeyValueStore & { data: Record<string, unknown> } {
       for (const k of keys) delete data[k];
     },
   };
+}
+
+/** As memoryStore(), plus a count of `set()` calls -- the atomicity guard
+ * for PlanLedger.updatePlan (edit-plan-spec §9.1 item 2): RED if anyone
+ * ever reimplements it as remove-then-add, which would be two `set` calls
+ * instead of one. */
+function countingStore(): KeyValueStore & { data: Record<string, unknown>; setCalls: number } {
+  const store = {
+    data: {} as Record<string, unknown>,
+    setCalls: 0,
+    async get(keys: readonly string[]) {
+      return Object.fromEntries(keys.filter((k) => k in store.data).map((k) => [k, store.data[k]]));
+    },
+    async set(items: Record<string, unknown>) {
+      store.setCalls += 1;
+      Object.assign(store.data, items);
+    },
+    async remove(keys: readonly string[]) {
+      for (const k of keys) delete store.data[k];
+    },
+  };
+  return store;
+}
+
+function plan(overrides: Partial<typeof validPlan> = {}): typeof validPlan {
+  return { ...validPlan, ...overrides };
 }
 
 const validPlan = {
@@ -400,5 +426,78 @@ describe("PlanLedger — the single validated writer", () => {
     await ledger.addPlan(validPlan);
     await ledger.removePlan("a1b2c3");
     expect(await ledger.listPlans()).toHaveLength(0);
+  });
+});
+
+describe("PlanLedger.updatePlan — the real update path (edit-plan-spec §1.2/§9.1)", () => {
+  it("replaces in place: with three plans, editing the middle one leaves it at index 1 and the array length at 3", async () => {
+    const store = memoryStore();
+    const ledger = new PlanLedger(store);
+    await ledger.addPlan(plan({ id: "aaaaaa" }));
+    await ledger.addPlan(plan({ id: "bbbbbb" }));
+    await ledger.addPlan(plan({ id: "cccccc" }));
+
+    await ledger.updatePlan(plan({ id: "bbbbbb", orderTotalCents: 12000 }));
+
+    const plans = await ledger.listPlans();
+    expect(plans).toHaveLength(3);
+    expect(plans[1]?.id).toBe("bbbbbb");
+    expect(plans[1]?.orderTotalCents).toBe(12000);
+    expect(plans[0]?.id).toBe("aaaaaa");
+    expect(plans[2]?.id).toBe("cccccc");
+  });
+
+  it("performs exactly ONE store.set call -- the atomicity guard. RED if updatePlan is ever reimplemented as remove-then-add", async () => {
+    const store = countingStore();
+    const ledger = new PlanLedger(store);
+    await ledger.addPlan(validPlan);
+    store.setCalls = 0; // only count the update itself
+
+    await ledger.updatePlan(plan({ orderTotalCents: 12000 }));
+
+    expect(store.setCalls).toBe(1);
+  });
+
+  it("preserves id and createdAt exactly as supplied by the caller, never inventing new ones", async () => {
+    const store = memoryStore();
+    const ledger = new PlanLedger(store);
+    await ledger.addPlan(validPlan);
+
+    const updated = await ledger.updatePlan(plan({ perInstallmentCents: 3000, orderTotalCents: 12000 }));
+
+    expect(updated.id).toBe(validPlan.id);
+    expect(updated.createdAt).toBe(validPlan.createdAt);
+    const [stored] = await ledger.listPlans();
+    expect(stored?.id).toBe(validPlan.id);
+    expect(stored?.createdAt).toBe(validPlan.createdAt);
+  });
+
+  it("an id the ledger does not hold throws PlanNotFoundError and does NOT append -- the array is unchanged, not just \"it threw\"", async () => {
+    const store = memoryStore();
+    const ledger = new PlanLedger(store);
+    await ledger.addPlan(validPlan);
+
+    await expect(ledger.updatePlan(plan({ id: "doesnotexist" }))).rejects.toThrow(PlanNotFoundError);
+    await expect(ledger.updatePlan(plan({ id: "doesnotexist" }))).rejects.toThrow(
+      /no stored plan with id "doesnotexist"/,);
+
+    const plans = await ledger.listPlans();
+    expect(plans).toHaveLength(1);
+    expect(plans[0]?.id).toBe(validPlan.id);
+  });
+
+  it("runs the full validatePlanRecord -- the closed-allowlist-both-directions guard applies to updates identically to adds", async () => {
+    const store = memoryStore();
+    const ledger = new PlanLedger(store);
+    await ledger.addPlan(validPlan);
+
+    const { source: _source, ...withoutSource } = plan();
+    await expect(ledger.updatePlan(withoutSource)).rejects.toThrow(
+      /missing required field "source"/,);
+    await expect(ledger.updatePlan({ ...plan(), extraField: "x" })).rejects.toThrow(/non-allowlisted field/);
+    await expect(ledger.updatePlan({ ...plan(), perInstallmentCents: 22.49 })).rejects.toThrow(/integer cents/);
+
+    // None of the rejected calls above wrote anything.
+    expect(await ledger.listPlans()).toHaveLength(1);
   });
 });

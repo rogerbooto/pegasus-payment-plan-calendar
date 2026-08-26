@@ -81,6 +81,65 @@ export const CADENCE_CHOOSE_ONE = "Choose one";
  */
 export const FIELD_FLAG_MISSING = "Not found";
 
+/** Edit form (edit-plan-spec §4.2/§8) -- a third title/sub/submit family,
+ * deliberately parallel to FORM_TITLE/FORM_SUB/FORM_SUBMIT rather than a
+ * reuse of them: an edit's prefills are the exact opposite of the add
+ * form's ("suggestions, never presented as authoritative") -- they ARE
+ * what is stored, so the copy has to say that instead. */
+export const FORM_TITLE_EDIT = "Change these numbers";
+export const FORM_SUB_EDIT = "These are the numbers you saved. Change what's wrong, then save it.";
+export const FORM_SUBMIT_EDIT = "Save changes";
+/** Replaces FIELD_HINT_PARSED/FIELD_HINT_MISSING/FIELD_HINT_FIRST_PAYMENT on
+ * the edit form ONLY (via renderForm's `hintOverride` option) -- those three
+ * strings all claim something was read from a page, which is false on a
+ * form opened from the toolbar popup with no page in play at all. */
+export const EDIT_FIELD_HINT = "This is what you saved. Change it if it's wrong.";
+
+/** The popup plan list (edit-plan-spec §3): one row per saved plan, with a
+ * per-row Edit control and (founder-decided, §11.1 revisited) a per-row
+ * Remove control alongside it. */
+export const EDIT_ACTION_SHORT = "Edit";
+/**
+ * Per-row Remove (the founder's own call: a list you can correct but never
+ * delete from invites "why can I change this but not delete it?"). Not
+ * part of the original spec's pre-cleared string list -- follows the exact
+ * same disambiguation pattern the spec designed for Edit (§3.4):
+ * REMOVE_ACTION_SHORT is the visible label, and the row's own
+ * editRowLabelSuffix() supplies the shared visually-hidden suffix, so
+ * "Remove, Remove, Remove" never reaches a screen-reader user any more
+ * than "Edit, Edit, Edit" would.
+ */
+export const REMOVE_ACTION_SHORT = "Remove";
+export const PLANS_LIST_HEADING = "Plans you've entered";
+
+/** The generalized hero notice (edit-plan-spec §5.3/§5.4) -- replaces the
+ * add-only SAVED_STATUS-or-nothing branch with four honest outcomes, plus
+ * a fifth (REMOVED_STATUS/REMOVED_UNDO, reused verbatim below) for the
+ * founder-added per-row Remove. */
+export const EDIT_SAVED_DATES = "Saved. These dates are on your calendar now:";
+export const EDIT_SAVED_NO_DATE_CHANGE = "Saved. The dates on your calendar didn't change.";
+export const EDIT_NO_CHANGE = "Nothing changed.";
+export const EDIT_TARGET_GONE = "That plan isn't there any more. Nothing was changed.";
+
+/**
+ * The visually-hidden suffix inside a plan row's Edit or Remove button
+ * (edit-plan-spec §3.4): the visible word ("Edit"/"Remove") stays the
+ * START of the accessible name (SC 2.5.3 Label in Name), and this suffix
+ * disambiguates two plans sharing a first-payment date by naming the
+ * per-payment amount too -- the founder's own two-plans-on-one-day
+ * screenshot is exactly the case this exists for. Shared by both row
+ * controls rather than duplicated: the suffix content itself never
+ * mentions which action it is attached to.
+ */
+export function editRowLabelSuffix(dateText: string, eachText: string): string {
+  return ` the plan starting ${dateText}, ${eachText} each`;
+}
+
+/** A plan row's second line. cadenceLabel is CADENCE_OPTION_LABELS[cadence], verbatim. */
+export function planRowSummary(count: number, cadenceLabel: string, totalText: string): string {
+  return `First of ${count} payments. ${cadenceLabel}. ${totalText} in total.`;
+}
+
 /**
  * The popup's own empty-ledger line, verbatim from
  * the approved design's "Before there are any plans"

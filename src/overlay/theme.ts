@@ -373,6 +373,16 @@ export const OVERLAY_CSS = `
 .note b { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .status { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; font-size: 13.5px; color: var(--text); padding-bottom: 15px; margin-bottom: 3px; border-bottom: 1px solid var(--border); }
+/*
+ * The popup hero's generalized transient notice (edit-plan-spec §5.4): most
+ * of its outcomes are text-only (no link/button beside the message), and
+ * .status's own flex/gap:12px would put an unwanted 12px gap between the
+ * lead text and each following date span/comma. .status--text opts those
+ * notices out of that; the two per-row action controls (Edit/Remove) still
+ * use plain .status when a button does sit beside the text.
+ */
+.status--text { display: block; }
+.status .d { font-weight: 700; font-variant-numeric: tabular-nums; }
 .plain { font-size: 15px; line-height: 1.5; }
 
 /* utilities last, so they win over component margins. */
