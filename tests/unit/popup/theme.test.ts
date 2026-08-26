@@ -182,3 +182,155 @@ describe("D5/D7 — the popup/welcome-tab surfaces fit at 375px and never resize
     expect(tabBody).toMatch(/width:\s*380px/);
   });
 });
+
+/*
+ * Founder-reported regression: the pinned "Add to my calendar" / "Cancel"
+ * row (`.form__actions`, sticky per §5 R4 above) visually collided with
+ * whatever scrolled behind it -- an opaque row with no edge still reads as
+ * two things colliding, not a layered toolbar, and the shortest surface
+ * (the overlay, capped by `.panel`'s own `max-height`) showed it worst.
+ * Two independent fixes, both regression-guarded below:
+ *   (a) the row now paints a real top edge (--border-strong), visible in
+ *       both colour schemes, so overlap reads as intentional layering;
+ *   (b) the scroll reservation below the last field
+ *       (`.panel__body:has(form)`'s `padding-bottom`) is now DERIVED from
+ *       the same custom properties the row and its buttons render with,
+ *       plus an explicit safety buffer -- not a hand-picked pixel figure
+ *       that silently stops matching the row's real height once a button's
+ *       own padding changes.
+ */
+describe("pinned form-actions row -- a visible top edge, in both colour schemes", () => {
+  it(".form__actions declares a border-top drawn from --border-strong (not the plainer --border, and not transparent)", () => {
+    const body = ruleBody(OVERLAY_CSS, /\.form__actions\s*\{/);
+    expect(body).not.toBeNull();
+    expect(body).toMatch(/border-top:\s*var\(--form-actions-border-w\)\s+solid\s+var\(--border-strong\)/);
+  });
+
+  it("--border-strong actually differs between LIGHT_TOKENS and DARK_TOKENS -- a visible edge, not a value that happens to vanish in one scheme", () => {
+    const lightMatch = /--border-strong:\s*(#[0-9a-fA-F]{3,6})/.exec(LIGHT_TOKENS);
+    const darkMatch = /--border-strong:\s*(#[0-9a-fA-F]{3,6})/.exec(DARK_TOKENS);
+    expect(lightMatch).not.toBeNull();
+    expect(darkMatch).not.toBeNull();
+    expect(lightMatch![1]!.toLowerCase()).not.toBe(darkMatch![1]!.toLowerCase());
+  });
+
+  it("liveness -- a .form__actions rule with the border-top declaration stripped is caught by the assertion above", () => {
+    const sabotaged = OVERLAY_CSS.replace(
+      /\.form__actions\s*\{[^}]*\}/,
+      ".form__actions { margin-top: 2px; position: sticky; bottom: 0; z-index: 1; background: var(--panel-bg); padding-top: 10px; padding-bottom: 2px; }",
+    );
+    const sabotagedBody = ruleBody(sabotaged, /\.form__actions\s*\{/);
+    expect(sabotagedBody).not.toMatch(/border-top:/);
+  });
+});
+
+describe("pinned form-actions row -- the scroll reservation is derived from the row's own declared height, not a magic number", () => {
+  /** Reads `--name: <n>px` out of LIGHT_TOKENS and returns the number of pixels. */
+  function tokenPx(name: string): number {
+    const match = new RegExp(`${name}:\\s*(\\d+(?:\\.\\d+)?)px`).exec(LIGHT_TOKENS);
+    if (!match) throw new Error(`token ${name} not found`);
+    return parseInt(match[1]!, 10);
+  }
+
+  it(".btn's min-height is the shared --btn-min-h token, not a re-hardcoded 44px (so the reservation formula tracks it)", () => {
+    const body = ruleBody(OVERLAY_CSS, /\.btn\s*\{/);
+    expect(body).not.toBeNull();
+    expect(body).toMatch(/min-height:\s*var\(--btn-min-h\)/);
+    expect(body).not.toMatch(/min-height:\s*44px/);
+  });
+
+  it(".form__actions's own padding is the shared --form-actions-pad-top/bottom tokens, not re-hardcoded pixel values", () => {
+    const body = ruleBody(OVERLAY_CSS, /\.form__actions\s*\{/);
+    expect(body).toMatch(/padding-top:\s*var\(--form-actions-pad-top\)/);
+    expect(body).toMatch(/padding-bottom:\s*var\(--form-actions-pad-bottom\)/);
+  });
+
+  it("--form-actions-h is a calc() built from --btn-min-h, --form-actions-pad-top, --form-actions-pad-bottom, --form-actions-border-w and --form-actions-safety -- the same tokens the row and its buttons are styled with", () => {
+    const match = /--form-actions-h:\s*calc\(([^;]+)\)/.exec(LIGHT_TOKENS);
+    expect(match).not.toBeNull();
+    const formula = match![1];
+    for (const token of [
+      "--btn-min-h",
+      "--form-actions-pad-top",
+      "--form-actions-pad-bottom",
+      "--form-actions-border-w",
+      "--form-actions-safety",
+    ]) {
+      expect(formula).toContain(`var(${token})`);
+    }
+  });
+
+  it(".panel__body:has(form) reserves var(--form-actions-h), not a re-hardcoded pixel figure", () => {
+    const body = ruleBody(OVERLAY_CSS, /\.panel__body:has\(form\)\s*\{/);
+    expect(body).not.toBeNull();
+    expect(body).toMatch(/padding-bottom:\s*var\(--form-actions-h\)/);
+    expect(body).not.toMatch(/padding-bottom:\s*\d/);
+  });
+
+  it("the reserved space (--form-actions-h) is strictly greater than the row's own minimum rendered height (button + row padding + border), by exactly the declared safety margin -- the relationship is asserted, not a hardcoded 64", () => {
+    const btnMinH = tokenPx("--btn-min-h");
+    const padTop = tokenPx("--form-actions-pad-top");
+    const padBottom = tokenPx("--form-actions-pad-bottom");
+    const borderW = tokenPx("--form-actions-border-w");
+    const safety = tokenPx("--form-actions-safety");
+
+    // The row's own minimum rendered height: the tallest child (a .btn,
+    // whose border-box is at least --btn-min-h since box-sizing is
+    // border-box everywhere) plus the row's own padding and border-top.
+    const minRenderedRowHeight = btnMinH + padTop + padBottom + borderW;
+    const reserved = minRenderedRowHeight + safety;
+
+    expect(reserved).toBeGreaterThan(minRenderedRowHeight);
+    expect(reserved - minRenderedRowHeight).toBe(safety);
+
+    // Cross-check against the actual declared --form-actions-h formula
+    // (same arithmetic, read straight out of the token block) so this
+    // test breaks if the calc() and the component tokens ever disagree.
+    const formulaMatch = /--form-actions-h:\s*calc\(([^;]+)\)/.exec(LIGHT_TOKENS);
+    const formulaTokens = formulaMatch![1]!.match(/var\((--[a-z-]+)\)/g)!.map((v) => v.slice(4, -1));
+    const formulaSum = formulaTokens.reduce((sum, name) => sum + tokenPx(name), 0);
+    expect(formulaSum).toBe(reserved);
+  });
+
+  it("liveness -- reverting .btn's min-height to a re-hardcoded 44px stops it tracking --btn-min-h, caught by the assertion above", () => {
+    const sabotaged = OVERLAY_CSS.replace(/\.btn\s*\{([^}]*)\}/, (_full, inner: string) =>
+      `.btn {${inner.replace("min-height: var(--btn-min-h);", "min-height: 44px;")}}`,
+    );
+    const sabotagedBody = ruleBody(sabotaged, /\.btn\s*\{/);
+    expect(sabotagedBody).not.toMatch(/min-height:\s*var\(--btn-min-h\)/);
+  });
+
+  it("liveness -- reverting .panel__body:has(form) to a hardcoded 64px is caught by the assertion above", () => {
+    const sabotaged = OVERLAY_CSS.replace(
+      /\.panel__body:has\(form\)\s*\{[^}]*\}/,
+      ".panel__body:has(form) { padding-bottom: 64px; }",
+    );
+    const sabotagedBody = ruleBody(sabotaged, /\.panel__body:has\(form\)\s*\{/);
+    expect(sabotagedBody).not.toMatch(/padding-bottom:\s*var\(--form-actions-h\)/);
+  });
+
+  it("liveness -- dropping --form-actions-safety from the calc() (i.e. no margin above the row's own minimum height) is caught by the relationship assertion", () => {
+    const sabotagedLightTokens = LIGHT_TOKENS.replace(
+      /--form-actions-h:\s*calc\([^;]+\)/,
+      "--form-actions-h: calc(var(--btn-min-h) + var(--form-actions-pad-top) + var(--form-actions-pad-bottom) + var(--form-actions-border-w))",
+    );
+    function sabotagedTokenPx(name: string): number {
+      const match = new RegExp(`${name}:\\s*(\\d+(?:\\.\\d+)?)px`).exec(sabotagedLightTokens);
+      if (!match) throw new Error(`token ${name} not found`);
+      return parseInt(match[1]!, 10);
+    }
+    const btnMinH = sabotagedTokenPx("--btn-min-h");
+    const padTop = sabotagedTokenPx("--form-actions-pad-top");
+    const padBottom = sabotagedTokenPx("--form-actions-pad-bottom");
+    const borderW = sabotagedTokenPx("--form-actions-border-w");
+    const minRenderedRowHeight = btnMinH + padTop + padBottom + borderW;
+
+    const formulaMatch = /--form-actions-h:\s*calc\(([^;]+)\)/.exec(sabotagedLightTokens);
+    const formulaTokens = formulaMatch![1]!.match(/var\((--[a-z-]+)\)/g)!.map((v) => v.slice(4, -1));
+    const formulaSum = formulaTokens.reduce((sum, name) => sum + sabotagedTokenPx(name), 0);
+
+    // Without the safety token in the formula, the reservation equals the
+    // row's bare minimum height exactly -- no margin at all.
+    expect(formulaSum).toBe(minRenderedRowHeight);
+  });
+});

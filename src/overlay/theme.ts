@@ -33,6 +33,29 @@ export const LIGHT_TOKENS = `
   --focus: #96764a;
   --btn-ink: #111111;
   --shadow: 0 10px 30px rgba(30,30,30,.10), 0 2px 6px rgba(30,30,30,.06);
+  /*
+   * Sizes, not colours -- no dark-mode variant, same reasoning as
+   * --panel-w below. These back the pinned form-actions row (.form__actions)
+   * and the scroll reservation that keeps it from covering the last field
+   * (.panel__body:has(form)): --form-actions-h is that reservation, built
+   * out of the SAME numbers the row and its buttons actually render with
+   * (rather than a hand-picked px figure that quietly stops matching once
+   * a button's own padding or min-height changes) plus a fixed safety
+   * margin absorbing the line-height/font-metric overshoot a 14px/700
+   * label at line-height 1.5 already produces past the declared 44px
+   * button min-height (measured ~45px here; font substitution on other
+   * platforms can push this further, hence the buffer rather than a
+   * tighter, more "precise" figure).
+   */
+  --btn-min-h: 44px;
+  --form-actions-pad-top: 10px;
+  --form-actions-pad-bottom: 2px;
+  --form-actions-border-w: 1px;
+  --form-actions-safety: 8px;
+  --form-actions-h: calc(
+    var(--btn-min-h) + var(--form-actions-pad-top) + var(--form-actions-pad-bottom) +
+    var(--form-actions-border-w) + var(--form-actions-safety)
+  );
 `;
 
 /**
@@ -51,6 +74,13 @@ export const LIGHT_TOKENS = `
  *               and re-declaring it here would just repeat the same value.
  *   --btn-ink   pairs with --gold (the primary button's own text colour);
  *               it inherits from light for the same reason --gold does.
+ * The pinned form-actions row's sizing tokens (--btn-min-h,
+ * --form-actions-pad-top, --form-actions-pad-bottom, --form-actions-border-w,
+ * --form-actions-safety, --form-actions-h) are absent for the same reason
+ * as --panel-w -- they are dimensions, not colours, and both colour
+ * schemes share one geometry for the pinned row. (--border-strong, which
+ * the row's top edge is drawn in, DOES vary by scheme and is already
+ * declared above/below.)
  */
 export const DARK_TOKENS = `
   --page-bg: #1a1a1a;
@@ -150,10 +180,19 @@ export const OVERLAY_CSS = `
 .tab[aria-selected="true"] { color: var(--gold-ink); font-weight: 700; border-bottom-color: var(--gold-ink); }
 
 .panel__body { padding: 18px 16px 16px; overflow-y: auto; flex: 1 1 auto; }
-/* §5 R4 continued: reserves room below the last field so the sticky
-   .form__actions row (bottom: 0 of this scroll container) can never sit
-   on top of it once scrolled all the way down. */
-.panel__body:has(form) { padding-bottom: 64px; }
+/*
+ * §5 R4 continued, plus the founder-reported regression fixed here:
+ * reserves room below the last field so the sticky .form__actions row
+ * (bottom: 0 of this scroll container) can never sit on top of it once
+ * scrolled all the way down. This used to be a bare 64px -- close to right
+ * by coincidence, not derivation, so a later edit to the button's own
+ * padding/min-height could silently widen the gap between the row's real
+ * height and the space reserved for it, without any test noticing.
+ * --form-actions-h (overlay/theme.ts LIGHT_TOKENS) is built from the same
+ * custom properties .btn and .form__actions render with below, so the two
+ * can no longer drift apart.
+ */
+.panel__body:has(form) { padding-bottom: var(--form-actions-h); }
 .panel__foot {
   padding: 12px 16px 14px; border-top: 1px solid var(--border);
   font-size: 12px; line-height: 1.45; color: var(--text-3); flex: none;
@@ -193,11 +232,28 @@ export const OVERLAY_CSS = `
  * save-failure line) can never push it below the fold or out from under a
  * pointer that is already reaching for it. An opaque panel-matching
  * background keeps scrolled-past content from showing through underneath.
+ *
+ * §5.4's own follow-up ("content scrolling behind a transparent row is
+ * unreadable") undersold the actual founder-reported defect: an OPAQUE row
+ * with no edge at all still reads as two things stacked on top of each
+ * other, because nothing tells the eye it is a layered, pinned toolbar
+ * rather than the next form field.
+ * border-top makes that layering explicit in both colour schemes
+ * (--border-strong, not --border, so it reads as a deliberate seam and not
+ * one more inter-field hairline). It is styled with the same custom
+ * properties .panel__body:has(form)'s reservation is built from, so a
+ * change to the row's own padding/border thickness cannot silently drift
+ * out of sync with the space reserved for it.
  */
-.form__actions { margin-top: 2px; position: sticky; bottom: 0; z-index: 1; background: var(--panel-bg); padding-top: 10px; padding-bottom: 2px; }
+.form__actions {
+  margin-top: 2px; position: sticky; bottom: 0; z-index: 1;
+  background: var(--panel-bg);
+  border-top: var(--form-actions-border-w) solid var(--border-strong);
+  padding-top: var(--form-actions-pad-top); padding-bottom: var(--form-actions-pad-bottom);
+}
 .btn {
   font: 700 14px inherit; border-radius: 100px; border: 1px solid transparent;
-  min-height: 44px; padding: 11px 20px; cursor: pointer;
+  min-height: var(--btn-min-h); padding: 11px 20px; cursor: pointer;
 }
 .btn--primary { background: var(--gold); color: var(--btn-ink); }
 .btn--primary:hover { background: var(--gold-hover); }
