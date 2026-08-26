@@ -326,9 +326,32 @@ export const OVERLAY_CSS = `
 .field--missing input, .field--missing select { border-style: dashed; }
 .hint { font-size: 11.5px; color: var(--text-3); margin-top: 4px; line-height: 1.4; }
 
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-.grid2 .field { margin-bottom: 0; }
-@container ppcpanel (max-width: 319px) { .grid2 { grid-template-columns: 1fr; } }
+/*
+ * A paired row's two labels do not share a line count: one wraps to two
+ * lines at this width, the sibling label does not. Each .field used to lay
+ * out on its own, so the input under the two-line label started lower than
+ * the one beside it -- same row, different position. Subgrid turns the
+ * head line and the control line into shared rows of .grid2 itself, so
+ * both fields read the same row heights: the shorter label's head row
+ * stretches to match the taller one, and both inputs begin at the same
+ * offset regardless of what either label does. No added height -- the row
+ * was already this tall; only which field's input sat at the top of it
+ * was off. The 4px row-gap replaces .field__head's own margin-bottom for
+ * fields inside .grid2 (zeroed just below) so the two are not both
+ * counted; the 12px stays a column-gap only.
+ */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; gap: 4px 12px; margin-bottom: 12px; }
+.grid2 .field { margin-bottom: 0; display: grid; grid-row: span 2; grid-template-rows: subgrid; }
+.grid2 .field__head { margin-bottom: 0; }
+/*
+ * Below the supported 375px floor (safety valve only -- see the layout
+ * spec's responsive table), the pair stacks to one column and the two
+ * fields no longer share rows, so the 4px above would otherwise read as
+ * the only space between one field and the next. Restore the wider
+ * spacing there; the head-to-control gap inside each stacked field simply
+ * grows to match, which is harmless at a width nothing supported renders.
+ */
+@container ppcpanel (max-width: 319px) { .grid2 { grid-template-columns: 1fr; row-gap: 12px; } }
 
 .form__h { font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; font-size: 18px; font-weight: 600; letter-spacing: -.008em; line-height: 1.3; }
 .form__sub { font-size: 13px; color: var(--text-2); margin-top: 4px; margin-bottom: 14px; }

@@ -390,3 +390,66 @@ describe("overlay-form-layout §7.4.6 — the grid stacks on panel width, not vi
     expect(sabotaged).toMatch(/@media \(max-width:\s*420px\)/);
   });
 });
+
+/**
+ * Bug: in a .grid2 pair, one label wraps to two lines at this width and
+ * its sibling does not ("Number of payments" vs. "How often"), and each
+ * .field used to size itself independently -- so the input under the
+ * two-line label sat lower than the input beside it. jsdom has no layout
+ * engine, so a computed-geometry assertion here (e.g. two inputs'
+ * getBoundingClientRect().top) would report 0 for both regardless of
+ * whether the underlying CSS produces alignment or not -- vacuously green
+ * either way, which is exactly the failure mode to avoid. These
+ * assertions instead read the CSS declarations that are the actual
+ * mechanism: .grid2 must declare two explicit row tracks, and each field
+ * placed inside it must subgrid those exact rows rather than laying out
+ * its own head/control rows privately. Remove the subgrid declaration
+ * (reverting to the shipped-with-480304b behaviour) and the row each
+ * field's input lands in is once again private to that field -- caught by
+ * the liveness twin below.
+ */
+describe("the add-a-plan form's paired inputs share a row regardless of label wrapping", () => {
+  it(".grid2 declares two explicit row tracks for its head/control pair", () => {
+    const gridBody = ruleBody(OVERLAY_CSS, /\.grid2\s*\{/);
+    expect(gridBody).toMatch(/grid-template-rows:\s*auto auto/);
+  });
+
+  it("liveness -- a .grid2 without the explicit row tracks is caught by the assertion above", () => {
+    const sabotaged = OVERLAY_CSS.replace(/(\.grid2\s*\{[^}]*?)grid-template-rows:\s*auto auto;\s*/, "$1");
+    const sabotagedBody = ruleBody(sabotaged, /\.grid2\s*\{/);
+    expect(sabotagedBody).not.toMatch(/grid-template-rows:\s*auto auto/);
+  });
+
+  it(".grid2 .field subgrids the parent's row tracks instead of sizing its head/control rows on its own", () => {
+    const fieldBody = ruleBody(OVERLAY_CSS, /\.grid2 \.field\s*\{/);
+    expect(fieldBody).toMatch(/display:\s*grid/);
+    expect(fieldBody).toMatch(/grid-template-rows:\s*subgrid/);
+    expect(fieldBody).toMatch(/grid-row:\s*span 2/);
+  });
+
+  it("liveness -- a .grid2 .field without the subgrid declaration (the pre-fix shape) is caught by the assertion above", () => {
+    const sabotaged = OVERLAY_CSS.replace(
+      /\.grid2 \.field\s*\{[^}]*\}/,
+      ".grid2 .field { margin-bottom: 0; }",
+    );
+    const sabotagedBody = ruleBody(sabotaged, /\.grid2 \.field\s*\{/);
+    expect(sabotagedBody).not.toMatch(/grid-template-rows:\s*subgrid/);
+  });
+
+  it(".grid2 .field__head has no margin-bottom of its own, so the shared row's spacing isn't counted twice", () => {
+    const headBody = ruleBody(OVERLAY_CSS, /\.grid2 \.field__head\s*\{/);
+    expect(headBody).toMatch(/margin-bottom:\s*0/);
+  });
+
+  it("liveness -- removing the .grid2 .field__head override is caught by the assertion above", () => {
+    const sabotaged = OVERLAY_CSS.replace(/\.grid2 \.field__head\s*\{[^}]*\}\s*/, "");
+    const sabotagedBody = ruleBody(sabotaged, /\.grid2 \.field__head\s*\{/);
+    expect(sabotagedBody).toBeNull();
+  });
+
+  it("the standalone (non-paired) .field -- e.g. First payment -- is untouched: still plain block flow with its own margin-bottom", () => {
+    const fieldBody = ruleBody(OVERLAY_CSS, /(?<!\.grid2 )\.field\s*\{/);
+    expect(fieldBody).toMatch(/margin-bottom:\s*12px/);
+    expect(fieldBody).not.toMatch(/display:\s*grid/);
+  });
+});
