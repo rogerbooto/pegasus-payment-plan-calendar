@@ -1,0 +1,12 @@
+{
+  "describes": "An invented shop's checkout, reached purely through path-shape + label-lexicon + instalment-phrase signals (no adapter host match involved at all): a labelled 'Order total' row and a bound count+money+cadence phrase both hard-gate, and a radiogroup payment method picker rounds out detectCheckout's 2-of-3. The generic path's own signal ceiling (labelled_total_row + bound_cluster, 2 of 6 possible here -- no provider widget in this fixture) sits below SOFT_SCORE_CONFIRMABLE_FLOOR (4), so this reaches PARTIAL with every scalar present, never PARSED_CONFIRMABLE. That PARTIAL result is what routes the overlay straight to the pre-filled manual-entry sheet (src/overlay/OverlayHost.ts's renderManual) -- detect, extract, the user confirms, calendar -- with no host match and no elevated port needed.",
+  "expectedKind": "PARTIAL",
+  "expectedMissing": [],
+  "expected": {
+    "orderTotalCents": 15000,
+    "installmentCount": 4,
+    "cadence": "BIWEEKLY",
+    "perInstallmentCents": 3750,
+    "currency": "CAD"
+  }
+}

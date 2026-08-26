@@ -70,20 +70,23 @@ This starts a small local server (no new dependency — just Node's own
 `http`/`fs`) on port 8080 by default, serving a handful of the same
 fixture pages the unit tests already assert against
 (`tests/fixtures/dom/`, routed by `scripts/dev/fixture-routes.mjs`). No
-elevated privileges needed — every fixture works there, including the
-first one below, *as an ordinary page*.
+elevated privileges needed for any of it — the full path (detection, a
+pre-filled form, and the calendar, end to end) is reachable at this
+default port through the first fixture in the list, which is matched
+purely by `src/engine/generic-detector.ts`'s path- and label-based
+signals rather than by any host allowlist.
 
-The one exception is what the first fixture below needs to reach its
-fullest state. The panel matches that page through the real
-shopify-checkout adapter code, which compares the page's host against a
-short allowlist — and a browser only reports a bare `localhost` (no
-`:<port>`) at port 80 specifically. So:
+One fixture is the exception, in the other direction: the
+shopify-checkout adapter one further down the list additionally exercises
+the real adapter code's own selectors, which are matched by comparing the
+page's host against a short allowlist — and a browser only reports a bare
+`localhost` (no `:<port>`) at port 80 specifically. So:
 
-- At the default port 8080, the first fixture still loads, and the panel
-  still runs the generic, path-based detection over it — everything
-  except the adapter match itself.
-- To see it matched through the real adapter code, serve on port 80
-  instead: `PPC_FIXTURE_PORT=80 npm run build:dev` and
+- At the default port 8080, that fixture still loads, and the panel still
+  runs the generic, path-based detection over it — everything except the
+  adapter match itself.
+- To see it matched through the real adapter code instead, serve on port
+  80: `PPC_FIXTURE_PORT=80 npm run build:dev` and
   `sudo PPC_FIXTURE_PORT=80 npm run serve:fixtures` (or a one-time
   `sudo setcap 'cap_net_bind_service=+ep' $(which node)`, after which
   plain `PPC_FIXTURE_PORT=80 npm run serve:fixtures` works without
@@ -118,7 +121,8 @@ What each fixture shows:
 
 | Fixture | What it exercises |
 |---|---|
-| Full installment offer | The path that matters most and has never run in a real browser before: detection, the confirmation sheet with all four numbers pre-filled, and the calendar, end to end. |
+| Full installment offer (generic path, no elevation needed) | The path that matters most: detection, a form with all four numbers pre-filled, and the calendar, end to end — on an invented shop's checkout, matched with no host allowlist at all, so it works the same at this default port as anywhere else. |
+| Full installment offer via the real adapter code (port 80 only) | The same shape of offer, this time matched through the real shopify-checkout adapter's own selectors and its one-click confirmation sheet. Needs port 80 specifically — see above. |
 | Degraded / unconfirmed | A checkout-shaped page with nothing to confirm yet — the panel says so plainly instead of staying silent. |
 | Amazon-shaped totals | The Items / Shipping / tax breakdown that motivated the order-total suggestion — open "Add a plan" to see it offered back to you. |
 | Two disagreeing totals | Two different totals on the page — the suggestion stays blank, never a guess. |

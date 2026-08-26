@@ -111,9 +111,10 @@ console.log(`host_permissions gained: ${devManifest.host_permissions.slice(-2).j
 console.log(`expects the fixture server on port ${fixturePort} (npm run serve:fixtures) -- set PPC_FIXTURE_PORT before both commands to use a different one.`);
 if (!devMeta.primaryFixtureAdapterMatchable) {
   console.log(
-    `\nNote: the primary fixture (full installment offer) only reaches the adapter-matched PARSED_CONFIRMABLE ` +
-      `state when actually served on port ${HTTP_DEFAULT_PORT} -- see CONTRIBUTING.md. Every other fixture works ` +
-      `fine at port ${fixturePort}.`,
+    `\nNote: the shopify-checkout adapter-matched fixture (full installment offer via the real adapter code) ` +
+      `only reaches its adapter-matched PARSED_CONFIRMABLE state when actually served on port ${HTTP_DEFAULT_PORT} ` +
+      `-- see CONTRIBUTING.md. The full flow is still reachable at port ${fixturePort} through the generic-path ` +
+      `fixture (full installment offer, generic path) -- every fixture works at port ${fixturePort}.`,
   );
 }
 console.log("This build must never be published. See CONTRIBUTING.md's local fixture-testing section.");

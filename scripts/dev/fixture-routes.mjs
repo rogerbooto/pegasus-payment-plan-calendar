@@ -17,15 +17,33 @@ import { DEV_ADAPTER_PATH_PREFIX } from "../lib/dev-build.mjs";
 
 export const FIXTURE_ROUTES = [
   {
+    path: "/checkout/summary",
+    file: "tests/fixtures/dom/generic-checkout/full-flow-no-elevation.html",
+    label: "Full installment offer (generic path, no elevation needed)",
+    describes:
+      'An invented shop\'s checkout with a "pay in 4" cluster: an order total, count, cadence ' +
+      "and per-payment amount, detected purely through src/engine/generic-detector.ts's path + " +
+      "label + instalment-phrase signals -- no adapter host match involved, so this reaches the " +
+      "same terminal state at this server's ordinary default port as it would at any other. " +
+      "Detection, the pre-filled manual-entry sheet, and the calendar all run end to end -- this " +
+      "is the path that had never run in a real browser before this fixture, and needs no " +
+      "elevated bind to try. See the adapter-matched fixture below for the port-80-only case, " +
+      "which additionally exercises adapter-specific selectors this generic path does not.",
+    pairedTest: "tests/unit/engine/generic-full-flow-fixture.test.ts",
+  },
+  {
     path: DEV_ADAPTER_PATH_PREFIX,
     file: "tests/fixtures/dom/adapters/shopify-checkout/full-confirmable.html",
-    label: "Full installment offer (primary path)",
+    label: "Full installment offer via the real adapter code (port 80 only)",
     describes:
-      'A "pay in 4" cluster with an order total, count, cadence and per-payment amount. ' +
-      "Matched by the dev-only shopify-checkout override (scripts/lib/dev-build.mjs) -- the " +
-      "same adapter code and selectors that already match checkout.shopify.com in production, " +
-      "with 'localhost' added as a second host. Detection, the confirmation sheet, and the " +
-      "calendar all run end to end -- this is the path that has never run in a real browser.",
+      'The same shape of "pay in 4" cluster, matched instead through the dev-only ' +
+      "shopify-checkout override (scripts/lib/dev-build.mjs) -- the same adapter code and " +
+      "selectors that already match checkout.shopify.com in production, with 'localhost' added " +
+      "as a second host. This is the ONE fixture that needs the server bound to port 80 " +
+      "specifically (a browser only omits the port from `location.host` at http's own default) " +
+      "-- see CONTRIBUTING.md. Everything else, including the fixture above, needs no elevation " +
+      "at all. Its value here is exercising adapter-specific selectors and the one-click " +
+      "confirmation sheet, which the generic path above deliberately does not reach.",
     pairedTest: "tests/unit/engine/adapters.test.ts",
   },
   {
