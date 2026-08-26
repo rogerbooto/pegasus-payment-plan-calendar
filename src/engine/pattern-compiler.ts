@@ -2,7 +2,7 @@
  * Compiles a validated instalment-phrase pattern string (the restricted
  * token language from src/config/loader.ts: literals plus {count} {money}
  * {cadence}) into a RegExp that binds count + amount + cadence in one text
- * cluster (D6 §A.2/§E.3 -- a count found in one node and an amount found in
+ * cluster (the design spec/§E.3 -- a count found in one node and an amount found in
  * another are never joined). This is the ONE compiler used by both the
  * generic detector and every adapter, so the binding rule can't be
  * re-implemented (and silently weakened) per call site.
@@ -87,7 +87,7 @@ export function compilePattern(pattern: string): CompiledPattern {
  * normalized textContent) and extracts count/money/cadence together, or
  * null if the pattern doesn't match this cluster at all. A pattern with no
  * {cadence} token yields `cadenceRaw: undefined` -- cadence stays an
- * unresolved (missing) scalar rather than a guess, exactly per D6 §D.2.
+ * unresolved (missing) scalar rather than a guess, exactly per the design spec
  */
 export function matchInstalmentPhrase(compiled: CompiledPattern, text: string): InstalmentPhraseMatch | null {
   const m = compiled.regex.exec(text);

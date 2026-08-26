@@ -1,5 +1,5 @@
 /**
- * Text normalization ahead of money/phrase parsing (D6 §E.1, D3 T03).
+ * Text normalization ahead of money/phrase parsing.
  * Strings containing direction-override or zero-width control characters
  * are rejected outright — they can reorder or hide what a human sees vs.
  * what a parser reads. Digits outside ASCII 0-9 are normalized ONLY when

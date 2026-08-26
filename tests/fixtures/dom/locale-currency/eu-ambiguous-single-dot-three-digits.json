@@ -1,5 +1,5 @@
 {
-  "finding": "M11-T02",
+  "finding": "T02",
   "category": "locale-currency",
   "describes": "eu ambiguous single dot three digits",
   "expectedResult": "rejected",

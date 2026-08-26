@@ -1,5 +1,5 @@
 {
-  "finding": "M11-T04",
+  "finding": "T04",
   "category": "markup-in-price-string",
   "describes": "a price node whose text content is markup-shaped (no working payload); the money parser must reject it outright, never sanitize/truncate to extract a number",
   "note": "the overlay-side render-as-textContent-only half of T04 belongs to the overlay lane (src/overlay/**), out of this task's scope",

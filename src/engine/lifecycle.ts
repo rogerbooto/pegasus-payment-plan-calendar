@@ -1,5 +1,5 @@
 /**
- * Observation lifecycle (D6 §G): the cheap pre-gate, ONE MutationObserver
+ * Observation lifecycle: the cheap pre-gate, ONE MutationObserver
  * scoped to the anchor subtree (never `document`), debounced parsing, SPA
  * route-change handling, and full teardown. This module owns no page data
  * and writes nothing to the page -- it only reads (querySelector) and
@@ -152,7 +152,7 @@ export function createEngineLifecycle(deps: EngineLifecycleDeps): EngineLifecycl
     if (path === lastPath) return;
     lastPath = path;
     // Each checkout session is a fresh engine instance -- no candidate
-    // state survives navigation (D6 §G.2).
+    // state survives navigation.
     detachObserver();
     evaluatePreGate();
   }

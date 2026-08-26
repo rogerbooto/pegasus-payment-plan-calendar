@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  *
  * The mandatory confirmation form (T01) and its manual-entry sibling.
- * Structural framing (D5 §E.1): a real <form>, no dialog role, no
+ * Structural framing: a real <form>, no dialog role, no
  * aria-modal, no focus trap. T01 wiring: the resulting record always
  * carries the values shown in the form at submit time — including the
  * user's own edits — never the original candidate untouched.
@@ -40,7 +40,7 @@ function container(): HTMLDivElement {
   return div;
 }
 
-describe("ConfirmationSheet — structural framing (D5 §E.1)", () => {
+describe("ConfirmationSheet — structural framing", () => {
   it("renders a real <form>, never a dialog: no role=dialog, no aria-modal, anywhere", () => {
     const el = container();
     renderConfirmationSheet(el, { candidate: candidate(), onConfirm: vi.fn(), onCancel: vi.fn() });
@@ -175,8 +175,7 @@ describe("ManualEntrySheet — provenance and missing-field labelling", () => {
 
     expect(el.querySelector("h3")?.textContent).toBe("The numbers we read from this page");
     expect(el.querySelector(".form__lead")?.textContent).toBe(
-      "We read part of this plan. Fill in the rest and check what's here.",
-    );
+      "We read part of this plan. Fill in the rest and check what's here.",);
     const totalField = el.querySelector("#ppc-f-total")?.closest(".field");
     const cadenceField = el.querySelector("#ppc-f-cadence")?.closest(".field");
     expect(totalField?.className).not.toContain("field--missing");

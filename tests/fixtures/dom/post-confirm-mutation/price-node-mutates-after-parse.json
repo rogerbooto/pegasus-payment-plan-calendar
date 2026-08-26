@@ -1,5 +1,5 @@
 {
-  "finding": "M11-T05",
+  "finding": "T05",
   "category": "post-confirm-mutation",
   "describes": "merchant JS mutates the price node's text after the confirmation snapshot is taken; the stored/computed value must equal the snapshot, not the mutated DOM",
   "note": "the mutation is driven inline by the test harness (mutatePriceNode helper), not by a separate *.mutate.js script file, to avoid adding an unlinted executable fixture file to the tree",

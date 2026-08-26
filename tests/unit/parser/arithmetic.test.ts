@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * M11-T07 test_instalment_total_crosscheck_both_branches — both the
+ * T07 test_instalment_total_crosscheck_both_branches — both the
  * within-tolerance branch (must NOT flag) and the over-tolerance branch
- * (must flag) are tested, per D6 §D.2 gate 3's exact tolerance formula, so
+ * (must flag) are tested, per the design spec gate 3's exact tolerance formula, so
  * a widened OR narrowed tolerance is independently visible in review.
  */
 import { describe, expect, it } from "vitest";
@@ -17,15 +17,14 @@ interface TaxShippingSidecar {
   readonly expectedConsistent: boolean;
 }
 
-describe("M11-T07 test_instalment_total_crosscheck_both_branches", () => {
+describe("T07 test_instalment_total_crosscheck_both_branches", () => {
   it("within-tolerance: first-installment-absorbs-rounding never flags", () => {
     const s = loadFixtureSidecar<TaxShippingSidecar>("tax-shipping-delta", "within-tolerance-rounding");
     expect(s.expectedConsistent).toBe(true);
     const result = arithmeticConsistent(
       s.installmentCount,
       assertCents(s.perInstallmentCents, "per"),
-      assertCents(s.orderTotalCents, "total"),
-    );
+      assertCents(s.orderTotalCents, "total"),);
     expect(result).toBe(true);
   });
 
@@ -35,8 +34,7 @@ describe("M11-T07 test_instalment_total_crosscheck_both_branches", () => {
     const result = arithmeticConsistent(
       s.installmentCount,
       assertCents(s.perInstallmentCents, "per"),
-      assertCents(s.orderTotalCents, "total"),
-    );
+      assertCents(s.orderTotalCents, "total"),);
     expect(result).toBe(false);
   });
 

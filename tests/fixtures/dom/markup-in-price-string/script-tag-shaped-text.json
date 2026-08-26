@@ -1,5 +1,5 @@
 {
-  "finding": "M11-T04",
+  "finding": "T04",
   "category": "markup-in-price-string",
   "describes": "a price node whose text content trails a markup-shaped payload",
   "expectedResult": "rejected"

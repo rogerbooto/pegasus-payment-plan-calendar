@@ -1,7 +1,7 @@
 /**
  * Manifest structural guards — T09, T18, T19. All three findings share one
  * committed artifact (src/manifest.json), so this file holds all three
- * checks the way M11-T09's target file note in the coverage matrix
+ * checks the way T09's target file note in the coverage matrix
  * describes ("tests/static/manifest.test.ts (shared file with T18/T19)").
  *
  * Every check below runs against a pure, exported validation function fed

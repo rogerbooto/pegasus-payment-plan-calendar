@@ -2,7 +2,7 @@
  * The engine's single orchestration entrypoint: given a page and the shared
  * extraction core, produce exactly one terminal EngineState. This is what
  * ties registry.ts (precedence), the adapters and the generic detector
- * together per D6 §A.3's fallback rule:
+ * together per the design spec's fallback rule:
  *
  *   Fallback is one-directional and single-step (adapter -> generic ->
  *   degraded), never a retry loop. Exactly one adapter extracts per
@@ -19,7 +19,7 @@
  * A PARTIAL or PARSED_CONFIRMABLE result from the winning adapter is
  * returned AS-IS -- it is not "below the confidence floor" in the sense
  * that triggers fallback; it is a legitimate, first-class terminal state
- * (D6 §D.1), and it is more precise than anything the generic path could
+ *, and it is more precise than anything the generic path could
  * produce (the generic path lacks the `adapter_path` soft signal by
  * definition). Falling back on a legitimate PARTIAL would also violate
  * "never merge scalars across adapters" in spirit, since the generic
@@ -70,8 +70,7 @@ function runGeneric(page: PageProbe, core: ExtractionCore): EngineState {
 export function runEngineWithAdapter(
   adapter: CheckoutAdapter | null,
   page: PageProbe,
-  core: ExtractionCore,
-): EngineState {
+  core: ExtractionCore,): EngineState {
   if (!adapter) return runGeneric(page, core);
 
   const result = tryAdapter(adapter, page, core);

@@ -1,7 +1,7 @@
 /**
  * The instalment-phrase pattern compiler: literals + {count}/{money}/
  * {cadence} tokens -> one RegExp binding all present tokens against a
- * SINGLE text cluster. This is the D6 §E.3 defense in code: a count found
+ * SINGLE text cluster. This is the the design spec defense in code: a count found
  * in one node and an amount found in another must never be joined, which
  * this module enforces by construction (one cluster, one regex, one
  * match) rather than by convention.

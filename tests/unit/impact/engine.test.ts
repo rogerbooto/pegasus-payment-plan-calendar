@@ -36,20 +36,17 @@ describe("paymentDates — cadence stepping", () => {
 
   it("BIWEEKLY steps 14 days at a time (the mockup's own example dates)", () => {
     expect(
-      paymentDates(plan({ cadence: "BIWEEKLY", firstPaymentDate: "2026-06-03", installmentCount: 4 })),
-    ).toEqual(["2026-06-03", "2026-06-17", "2026-07-01", "2026-07-15"]);
+      paymentDates(plan({ cadence: "BIWEEKLY", firstPaymentDate: "2026-06-03", installmentCount: 4 })),).toEqual(["2026-06-03", "2026-06-17", "2026-07-01", "2026-07-15"]);
   });
 
   it("MONTHLY steps one calendar month, same day-of-month, when the day exists in every target month", () => {
     expect(
-      paymentDates(plan({ cadence: "MONTHLY", firstPaymentDate: "2026-01-15", installmentCount: 3 })),
-    ).toEqual(["2026-01-15", "2026-02-15", "2026-03-15"]);
+      paymentDates(plan({ cadence: "MONTHLY", firstPaymentDate: "2026-01-15", installmentCount: 3 })),).toEqual(["2026-01-15", "2026-02-15", "2026-03-15"]);
   });
 
   it("MONTHLY clamps to the target month's last day instead of rolling over (Jan 31 -> Feb 28, not Mar 2/3)", () => {
     expect(
-      paymentDates(plan({ cadence: "MONTHLY", firstPaymentDate: "2026-01-31", installmentCount: 3 })),
-    ).toEqual(["2026-01-31", "2026-02-28", "2026-03-31"]);
+      paymentDates(plan({ cadence: "MONTHLY", firstPaymentDate: "2026-01-31", installmentCount: 3 })),).toEqual(["2026-01-31", "2026-02-28", "2026-03-31"]);
   });
 
   it("MONTHLY clamping is computed fresh from the first date each time, so it does not drift onto an ever-earlier day", () => {

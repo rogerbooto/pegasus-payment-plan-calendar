@@ -24,8 +24,7 @@ export interface ElementSpec {
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
-  spec: ElementSpec = {},
-): HTMLElementTagNameMap[K] {
+  spec: ElementSpec = {},): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
   if (spec.className) node.className = spec.className;
   if (spec.attrs) {

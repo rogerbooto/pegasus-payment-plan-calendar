@@ -434,7 +434,6 @@ describe("copy-compliance — no blocked pattern in any rendered user-facing str
     const violations = scanCorpus(corpus);
     expect(
       violations,
-      violations.map((v) => `"${v.text}" matched ${v.pattern}`).join("\n"),
-    ).toEqual([]);
+      violations.map((v) => `"${v.text}" matched ${v.pattern}`).join("\n"),).toEqual([]);
   });
 });

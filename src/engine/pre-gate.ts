@@ -1,5 +1,5 @@
 /**
- * The cheap, once-run pre-gate (D6 §G.1): URL path pattern + one structural
+ * The cheap, once-run pre-gate: URL path pattern + one structural
  * probe. No checkout fingerprint => the caller (src/engine/lifecycle.ts)
  * goes dormant -- no observer, no timers. Deliberately cheaper than the
  * full detectCheckout/detectInstallmentOffer pair in generic-detector.ts:

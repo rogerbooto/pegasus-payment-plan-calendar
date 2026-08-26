@@ -1,5 +1,5 @@
 {
-  "finding": "M11-T06",
+  "finding": "T06",
   "category": "hidden-decoy",
   "describes": "offscreen-positioned decoy total beside the real, visible total",
   "expectedSelectedText": "CAD 37.50"

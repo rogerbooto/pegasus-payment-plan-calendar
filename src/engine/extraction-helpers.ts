@@ -2,12 +2,12 @@
  * Shared anchor-location helpers used by BOTH the generic detector and
  * every platform adapter, so "primary selector first, label-lexicon
  * fallback second, never launder an ambiguous primary result through the
- * fallback" (D6 §A.1.3, §A.2, §E.2) has exactly one implementation.
+ * fallback" has exactly one implementation.
  *
  * These helpers call the visibility/normalization PRIMITIVES
  * (isVisibleCandidate, normalizeOrReject) directly rather than through an
  * injected ExtractionCore: `CheckoutAdapter.locate()` runs before any
- * `ExtractionCore` is available by interface design (D6 §A.3 -- `locate`
+ * `ExtractionCore` is available by interface design (the design spec -- `locate`
  * takes only a `PageProbe`), so locate-time candidate filtering must work
  * without one. Nothing here re-implements those primitives; it calls the
  * real src/parser/* functions, exactly as src/parser/candidates.ts itself
@@ -57,8 +57,7 @@ function findValueNearLabel(label: Element): Element[] {
 export function locateByCssOrLabel(
   page: PageProbe,
   cssSelectors: readonly string[],
-  labelLexicon: readonly string[] | undefined,
-): LocatedAnchor | null {
+  labelLexicon: readonly string[] | undefined,): LocatedAnchor | null {
   const cssCandidates = cssSelectors.flatMap((sel) => [...page.querySelectorAll(sel)]);
   if (cssCandidates.length > 0) {
     const selected = selectSingleCandidate(cssCandidates);
@@ -68,8 +67,7 @@ export function locateByCssOrLabel(
 
   const lexicon = new Set(labelLexicon.map((t) => t.toLowerCase()));
   const labelCandidates = [...page.querySelectorAll(LABEL_MATCH_ELEMENT_SELECTOR)].filter((el) =>
-    lexicon.has(normalizedTrim(el.textContent).toLowerCase()),
-  );
+    lexicon.has(normalizedTrim(el.textContent).toLowerCase()),);
   const valueCandidates = labelCandidates.flatMap((label) => findValueNearLabel(label));
   if (valueCandidates.length === 0) return null;
   const selected = selectSingleCandidate(valueCandidates);
@@ -84,8 +82,7 @@ export function locateByCssOrLabel(
 export function locateProviderWidget(
   page: PageProbe,
   cssSelectors: readonly string[],
-  iframeOrigins: readonly string[] | undefined,
-): Element | null {
+  iframeOrigins: readonly string[] | undefined,): Element | null {
   for (const sel of cssSelectors) {
     const found = page.querySelectorAll(sel);
     if (found.length > 0) return found[0] ?? null;
@@ -101,7 +98,7 @@ export function locateProviderWidget(
 /**
  * Matches ONE element's own normalized text against a pattern list (never a
  * subtree's aggregate text), so a count in one node and an amount in
- * another are structurally unable to be joined (D6 §E.3). Rejects (returns
+ * another are structurally unable to be joined. Rejects (returns
  * null) if the element isn't currently visible or its text fails the
  * bidi/homoglyph normalization boundary -- the same visibility hard gate
  * every other candidate must pass.
@@ -128,8 +125,7 @@ export function matchClusterElement(element: Element, patterns: readonly string[
  */
 export function locateInstalmentCluster(
   page: PageProbe,
-  patterns: readonly string[],
-): { element: Element; match: InstalmentPhraseMatch } | null {
+  patterns: readonly string[],): { element: Element; match: InstalmentPhraseMatch } | null {
   const matches: { element: Element; match: InstalmentPhraseMatch }[] = [];
 
   for (const el of page.querySelectorAll(TEXT_BEARING_SELECTOR)) {
@@ -142,8 +138,6 @@ export function locateInstalmentCluster(
   const leafMatches = matches.filter(
     (m) =>
       !matches.some(
-        (other) => other.element !== m.element && m.element.contains(other.element) && matchedElements.has(other.element),
-      ),
-  );
+        (other) => other.element !== m.element && m.element.contains(other.element) && matchedElements.has(other.element),),);
   return leafMatches[0] ?? matches[0] ?? null;
 }

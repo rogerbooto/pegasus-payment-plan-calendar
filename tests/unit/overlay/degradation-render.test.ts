@@ -118,8 +118,7 @@ describe("OverlayHost — DEGRADED never reaches the numeric-confirmation screen
       const shadow = getShadow();
       expect(shadow.textContent).toContain(copy.NOT_RECOGNIZED);
       expect([...shadow.querySelectorAll("button")].some((b) => b.textContent === copy.ACTION_CHECK)).toBe(false);
-    },
-  );
+    },);
 });
 
 describe("OverlayHost — PARTIAL never reaches the numeric-confirmation screen either (Invariant #9)", () => {

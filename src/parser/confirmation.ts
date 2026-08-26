@@ -69,11 +69,9 @@ export function confirmPlan(args: ConfirmPlanArgs): ConfirmedPlanInput {
   if (
     !Number.isSafeInteger(values.installmentCount) ||
     values.installmentCount < INSTALLMENT_COUNT_MIN ||
-    values.installmentCount > INSTALLMENT_COUNT_MAX
-  ) {
+    values.installmentCount > INSTALLMENT_COUNT_MAX) {
     throw new MoneyError(
-      `values.installmentCount must be an integer between ${INSTALLMENT_COUNT_MIN} and ${INSTALLMENT_COUNT_MAX}`,
-    );
+      `values.installmentCount must be an integer between ${INSTALLMENT_COUNT_MIN} and ${INSTALLMENT_COUNT_MAX}`,);
   }
   if (!CADENCES.includes(values.cadence)) {
     throw new MoneyError("values.cadence must be WEEKLY, BIWEEKLY or MONTHLY");
@@ -104,8 +102,7 @@ export interface ConfirmedPlanMeta {
  */
 export function buildConfirmedPlanRecord(
   confirmed: ConfirmedPlanInput,
-  meta: ConfirmedPlanMeta,
-): PaymentPlanRecord {
+  meta: ConfirmedPlanMeta,): PaymentPlanRecord {
   const source: PlanSource = "checkout_confirmed";
   return {
     id: meta.id,

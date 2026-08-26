@@ -29,25 +29,21 @@ describe("extension FORBIDDEN_PROP_KEYS superset of the canonical app snapshot",
 
   it("is a strict superset: every canonical app key is present in the extension's set", () => {
     const missing = [...CANONICAL_FORBIDDEN_KEYS_SNAPSHOT].filter(
-      (key) => !FORBIDDEN_PROP_KEYS.has(key),
-    );
+      (key) => !FORBIDDEN_PROP_KEYS.has(key),);
     expect(
       missing,
       `extension FORBIDDEN_PROP_KEYS is missing app-forbidden keys: ${missing.join(", ")}. ` +
         "The extension must forbid everything the app forbids, plus its own additions — " +
-        "never fewer.",
-    ).toEqual([]);
+        "never fewer.",).toEqual([]);
   });
 
   it("liveness — the extension carries at least one class the app snapshot does not (proves this isn't equality-in-disguise)", () => {
     const extensionOnly = [...FORBIDDEN_PROP_KEYS].filter(
-      (key) => !CANONICAL_FORBIDDEN_KEYS_SNAPSHOT.has(key),
-    );
+      (key) => !CANONICAL_FORBIDDEN_KEYS_SNAPSHOT.has(key),);
     expect(
       extensionOnly.length,
       "expected extension-specific forbidden classes (e.g. cart, sku, price) beyond the " +
         "app's canonical set; if this is empty, either the snapshot drifted or the " +
-        "extension's own classes were deleted",
-    ).toBeGreaterThan(0);
+        "extension's own classes were deleted",).toBeGreaterThan(0);
   });
 });

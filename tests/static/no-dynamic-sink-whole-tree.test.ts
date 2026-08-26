@@ -13,9 +13,8 @@
  * everything else green — a `fs`-based regex scan over the committed text
  * has no such escape hatch (per this task's own stated standard).
  *
- * RED when: any file under src/ contains eval(, new Function(,
- * setTimeout/setInterval called with a string first argument, an
- * innerHTML/outerHTML assignment, insertAdjacentHTML(, or a <script
+ * RED when: any file under src/ contains eval(new Function(* setTimeout/setInterval called with a string first argument, an
+ * innerHTML/outerHTML assignment, insertAdjacentHTML(or a <script
  * src="http...">/dynamic import() of a non-bundled URL.
  */
 import { describe, expect, it } from "vitest";

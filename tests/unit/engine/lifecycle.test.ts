@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * D6 §G lifecycle: the pre-gate decides whether to observe at all; when it
+ * the design spec lifecycle: the pre-gate decides whether to observe at all; when it
  * does, exactly ONE MutationObserver is attached, scoped to an anchor
  * subtree (never `document`); rapid mutations are debounced into a single
  * parse; teardown disconnects everything and restores history; a route

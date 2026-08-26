@@ -1,6 +1,6 @@
 /**
- * Popup-only user-facing strings, verbatim from mockups/extension-chrome.html
- * and M11-M1-IMPACT-VIEW-SPEC.md §5's toolbar-only MENTION row. Shared
+ * Popup-only user-facing strings, verbatim from the approved design
+ * and the design spec's toolbar-only MENTION row. Shared
  * strings (qualifiers, "Add a plan", view labels) live in
  * src/overlay/copy.ts and are imported from there rather than duplicated.
  */
@@ -50,7 +50,7 @@ export const ONBOARD_CONTINUE = "Continue";
 
 /**
  * The only two Pegasus-family URLs permitted anywhere in the bundle
- * (M11-D5-MARKETPLACE-FIREWALL.md §D.3.1). The real marketing origin has
+ *. The real marketing origin has
  * not been assigned in any spec this build was given (every reference
  * document uses the `<marketing-host>` placeholder); `.invalid` is the
  * IANA-reserved TLD for exactly this situation — a syntactically valid URL

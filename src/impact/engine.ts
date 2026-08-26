@@ -151,11 +151,9 @@ function assertConfirmationMatchesPlan(plan: PaymentPlanRecord, confirmation: Co
     plan.orderTotalCents !== confirmation.orderTotalCents ||
     plan.installmentCount !== confirmation.installmentCount ||
     plan.cadence !== confirmation.cadence ||
-    plan.perInstallmentCents !== confirmation.perInstallmentCents
-  ) {
+    plan.perInstallmentCents !== confirmation.perInstallmentCents) {
     throw new ConfirmationError(
-      "plan under consideration does not match the values the user confirmed",
-    );
+      "plan under consideration does not match the values the user confirmed",);
   }
 }
 
@@ -172,8 +170,7 @@ export function computeImpact(
   plan: PaymentPlanRecord,
   confirmation: ConfirmedPlanInput,
   existing: readonly PaymentPlanRecord[],
-  today: IsoDate,
-): ImpactView {
+  today: IsoDate,): ImpactView {
   assertConfirmationMatchesPlan(plan, confirmation);
   assertPositiveCents(plan.orderTotalCents, "plan.orderTotalCents");
   assertPositiveCents(plan.perInstallmentCents, "plan.perInstallmentCents");
@@ -202,8 +199,7 @@ export function computeImpact(
     if (collisions && collisions.length > 0) {
       const existingTotalCents = collisions.reduce(
         (sum, c) => addCents(sum, c.amountCents),
-        ZERO_CENTS,
-      );
+        ZERO_CENTS,);
       sameDayClusters.push({ date, existingCount: collisions.length, existingTotalCents });
     }
   }

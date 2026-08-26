@@ -1,6 +1,6 @@
 {
   "adapter": "shopify-checkout",
-  "describes": "match() succeeds (host, path, and the bnplWidget CSS probe all hit) but there is nothing else on the page to extract -- locate() returns a non-null AnchorSet (providerWidget only), extract() finds zero hard-gated scalars and resolves DEGRADED, which is a failure per D6 §A.3 and triggers the single fallback step to the generic detector. The generic detector also finds nothing (no labelled total, no payment affordance) on this same minimal page, so the final state is DEGRADED with the MORE SPECIFIC 'adapter_error' reason, not the generic 'no_match'.",
+  "describes": "match() succeeds (host, path, and the bnplWidget CSS probe all hit) but there is nothing else on the page to extract -- locate() returns a non-null AnchorSet (providerWidget only), extract() finds zero hard-gated scalars and resolves DEGRADED, which per the design spec and triggers the single fallback step to the generic detector. The generic detector also finds nothing (no labelled total, no payment affordance) on this same minimal page, so the final state is DEGRADED with the MORE SPECIFIC 'adapter_error' reason, not the generic 'no_match'.",
   "expectedKind": "DEGRADED",
   "expectedReason": "adapter_error"
 }

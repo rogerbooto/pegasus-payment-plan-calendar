@@ -1,5 +1,5 @@
 {
-  "finding": "M11-T02",
+  "finding": "T02",
   "category": "locale-currency",
   "describes": "us comma grouping dot decimal",
   "expectedResult": "parsed",

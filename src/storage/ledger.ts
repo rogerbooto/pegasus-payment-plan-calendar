@@ -78,8 +78,7 @@ function assertNoForbiddenKeys(value: unknown, path: string): void {
     for (const forbidden of FORBIDDEN_KEY_SUBSTRINGS) {
       if (lower.includes(forbidden)) {
         throw new StorageSchemaError(
-          `refusing to persist key "${path}${key}": matches forbidden class "${forbidden}"`,
-        );
+          `refusing to persist key "${path}${key}": matches forbidden class "${forbidden}"`,);
       }
     }
     assertNoForbiddenKeys(nested, `${path}${key}.`);
@@ -89,8 +88,7 @@ function assertNoForbiddenKeys(value: unknown, path: string): void {
 function assertClosedFieldSet(
   record: Record<string, unknown>,
   allowlist: readonly string[],
-  what: string,
-): void {
+  what: string,): void {
   for (const key of Object.keys(record)) {
     if (!allowlist.includes(key)) {
       throw new StorageSchemaError(`${what} contains non-allowlisted field "${key}"`);
@@ -136,11 +134,9 @@ export function validatePlanRecord(raw: unknown): PaymentPlanRecord {
     typeof installmentCount !== "number" ||
     !Number.isSafeInteger(installmentCount) ||
     installmentCount < INSTALLMENT_COUNT_MIN ||
-    installmentCount > INSTALLMENT_COUNT_MAX
-  ) {
+    installmentCount > INSTALLMENT_COUNT_MAX) {
     throw new StorageSchemaError(
-      `installmentCount must be an integer between ${INSTALLMENT_COUNT_MIN} and ${INSTALLMENT_COUNT_MAX}`,
-    );
+      `installmentCount must be an integer between ${INSTALLMENT_COUNT_MIN} and ${INSTALLMENT_COUNT_MAX}`,);
   }
   assertPositiveCents(record.orderTotalCents, "orderTotalCents");
   assertPositiveCents(record.perInstallmentCents, "perInstallmentCents");

@@ -33,8 +33,7 @@ const lockfile = JSON.parse(readFileSync(LOCKFILE_PATH, "utf-8")) as {
  * artifact.
  */
 function findEntriesMissingIntegrity(
-  packages: Record<string, { integrity?: string; link?: boolean }>,
-): string[] {
+  packages: Record<string, { integrity?: string; link?: boolean }>,): string[] {
   return Object.entries(packages)
     .filter(([key, entry]) => key !== "" && !entry.link && !entry.integrity)
     .map(([key]) => key);
@@ -64,7 +63,6 @@ describe("supply chain — lockfile integrity and dependency ceiling (T15b)", ()
   it("total resolved dependency count does not exceed the pinned ceiling", () => {
     const total = Object.keys(lockfile.packages).filter((k) => k !== "").length;
     expect(total, `resolved dependency count (${total}) exceeds the pinned ceiling (${DEPENDENCY_COUNT_CEILING}) — raising the ceiling is a reviewed diff, not a silent bump`).toBeLessThanOrEqual(
-      DEPENDENCY_COUNT_CEILING,
-    );
+      DEPENDENCY_COUNT_CEILING,);
   });
 });

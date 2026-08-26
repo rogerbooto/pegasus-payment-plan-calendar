@@ -1,15 +1,13 @@
 /**
- * Marketplace-firewall test, extension half (M11-D5 §B.1). No data
- * marketplace exists anywhere in this project today, so "nothing
- * Watcher-sourced can reach an aggregate" reduces to an air-gap assertion:
- * this extension has no network code at all. Its complete outbound surface
- * is zero — see src/telemetry/sink.ts's noopSink, which validates and
- * drops. This test pins that structurally so introducing a transport is a
- * loud, reviewed, RED-on-CI act rather than a quiet one.
+ * The air gap.
  *
- * RED when: any file under src/ calls a network-request API, or the
- * manifest requests a permission (`webRequest`, `declarativeNetRequest`,
- * `cookies`) that would let such a call redirect or intercept data.
+ * Nothing this extension holds can leave the device, because the extension has
+ * no network code at all. Its complete outbound surface is zero — see
+ * src/telemetry/sink.ts, which validates an event and then drops it.
+ *
+ * This test pins that structurally, so introducing any transport becomes a
+ * loud, reviewed, red-on-CI act rather than a quiet one. "Everything stays on
+ * this device" is only a promise if nothing is able to send.
  */
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -61,7 +59,7 @@ function scanPermissionsForNetworkAdjacent(permissions: readonly string[]): stri
   return permissions.filter((permission) => NETWORK_ADJACENT_PERMISSIONS.includes(permission));
 }
 
-describe("marketplace firewall — extension air gap (M11-D5 §B.1)", () => {
+describe("air gap — no network-capable code or permission exists", () => {
   const files = walk(SRC_ROOT);
 
   it("liveness — found a non-trivial corpus to scan (a misconfigured root must not pass vacuously)", () => {

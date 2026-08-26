@@ -5,7 +5,7 @@
  * is editable; there is no auto-confirm and no "skip confirmation"
  * setting.
  *
- * Structural framing (M11-M1-IMPACT-VIEW-SPEC.md §0.1, D5 §E.1): this is a
+ * Structural framing: this is a
  * <form>, never role="dialog"/aria-modal, with no focus trap and no page
  * backdrop. It renders into the panel's own content-region container
  * (passed in as `container`, an element already inside the shadow root —
@@ -198,8 +198,7 @@ function renderForm(opts: BuildFormOptions): void {
         firstInput,
         el("p", { className: "hint", attrs: { id: "ppc-f-first-hint" }, text: copy.FIELD_HINT_FIRST_PAYMENT }),
       ],
-    }),
-  );
+    }),);
 
   const echo = el("p", {
     className: "echo",
@@ -281,8 +280,7 @@ function renderForm(opts: BuildFormOptions): void {
         count,
         formatCents(eachCents, opts.currency),
         formatCents(product, opts.currency),
-        formatCents(totalCents, opts.currency),
-      );
+        formatCents(totalCents, opts.currency),);
       arithmeticNote = el("p", {
         className: "note",
         children: [
@@ -318,8 +316,7 @@ function renderForm(opts: BuildFormOptions): void {
     try {
       record = opts.buildRecord(
         { orderTotalCents: totalCents, installmentCount: count, cadence, perInstallmentCents: eachCents },
-        first,
-      );
+        first,);
     } catch {
       return;
     }
@@ -397,8 +394,7 @@ export function renderConfirmationSheet(container: HTMLElement, props: Confirmat
  */
 function buildManualPlanRecord(
   confirmed: ConfirmedPlanInput,
-  meta: { readonly id: string; readonly createdAt: IsoDate; readonly firstPaymentDate: IsoDate },
-): PaymentPlanRecord {
+  meta: { readonly id: string; readonly createdAt: IsoDate; readonly firstPaymentDate: IsoDate },): PaymentPlanRecord {
   return {
     id: meta.id,
     createdAt: meta.createdAt,

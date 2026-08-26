@@ -1,5 +1,5 @@
 /**
- * Bundled constants for the GENERIC detector only (D6 §A.2). These are
+ * Bundled constants for the GENERIC detector only. These are
  * deliberately NOT platform selectors and do not live in
  * src/config/adapters.config.json: the generic detector's whole reason to
  * exist is that it needs no merchant- or platform-specific selector. The
@@ -17,7 +17,7 @@ export const GENERIC_CHECKOUT_PATH_PATTERNS: readonly string[] = [
   "/order/confirm",
 ];
 
-/** EN/FR, CA+US geography (D6 §A.2(i)). Exact (trimmed, case-insensitive) label match only. */
+/** EN/FR, CA+US geography (the design spec(i)). Exact (trimmed, case-insensitive) label match only. */
 export const GENERIC_ORDER_TOTAL_LABEL_LEXICON: readonly string[] = [
   "total",
   "order total",
@@ -59,7 +59,7 @@ export const GENERIC_PROVIDER_WIDGET_IFRAME_ORIGINS: readonly string[] = [
 ];
 
 /**
- * count + amount + cadence bound in one text cluster (D6 §E.3): a
+ * count + amount + cadence bound in one text cluster: a
  * free-floating amount and a count found in separate nodes are never
  * joined. Patterns lacking {cadence} still bind count+amount; cadence then
  * stays an unresolved (missing) scalar rather than a guess.

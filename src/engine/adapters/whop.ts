@@ -1,6 +1,6 @@
 /**
  * Platform adapter: whop (whop.com). Niche but demographically on-target
- * (D6 §B) -- a small, cheap slot: single host, single vendor.
+ * -- a small, cheap slot: single host, single vendor.
  *
  * Every selector, host and pattern this adapter uses is DATA, read from the
  * bundled, validated config (src/config/adapters.config.json via
@@ -13,7 +13,7 @@ import { CONFIG_SCHEMA_VERSION } from "../../shared/constants";
 import { BUNDLED_CONFIG } from "../../config/bundled";
 import { extractAdapterAnchors, locateAdapterAnchors, matchAdapterConfig } from "../adapter-common";
 
-/** Static, never computed from page data (D6 §A.3). */
+/** Static, never computed from page data. */
 export const whopAdapterSpecificity = 20;
 
 export const whopAdapter: CheckoutAdapter = {

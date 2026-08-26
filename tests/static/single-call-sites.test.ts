@@ -71,7 +71,7 @@ describe("single call site — chrome.storage.local.set (T17)", () => {
     expect(matches?.length).toBe(2);
   });
 
-  it("exactly one file in src/ calls chrome.storage.local.set(, and it is src/storage/store.ts", () => {
+  it("exactly one file in src/ calls chrome.storage.local.set(and it is src/storage/store.ts", () => {
     const hits = countCallSites(files, STORAGE_SET_PATTERN);
     const totalCallSites = hits.reduce((sum, h) => sum + h.count, 0);
     expect(hits.map((h) => h.file), "expected exactly one file to call chrome.storage.local.set(").toEqual([
@@ -90,7 +90,7 @@ describe("single call site — chrome.permissions.request (T18)", () => {
     expect(matches?.length).toBe(2);
   });
 
-  it("exactly one file in src/ calls chrome.permissions.request(, and it is src/popup/popup.ts", () => {
+  it("exactly one file in src/ calls chrome.permissions.request(and it is src/popup/popup.ts", () => {
     const hits = countCallSites(files, PERMISSIONS_REQUEST_PATTERN);
     const totalCallSites = hits.reduce((sum, h) => sum + h.count, 0);
     expect(hits.map((h) => h.file)).toEqual([join(SRC_ROOT, "popup", "popup.ts")]);

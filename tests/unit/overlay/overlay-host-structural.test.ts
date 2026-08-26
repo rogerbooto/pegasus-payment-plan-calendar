@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  *
- * The overlay host's structural invariants (M11-D3-THREAT-MODEL.md T10,
+ * The overlay host's structural invariants (the design spec T10,
  * T11, T12, T13) and dismissal-by-keyboard. Each test asserts the specific
  * guard named in its title, not just a visible outcome, so it turns RED
  * when that exact mitigation is deleted — matching the task's sabotage-
@@ -173,7 +173,7 @@ describe("OverlayHost — dismissal", () => {
 
     expect(document.body.querySelector(OVERLAY_HOST_TAG)).toBeNull();
 
-    // RED if dismissal is not "final for this session" (D3 §4.11): a later
+    // RED if dismissal is not "final for this session": a later
     // mount() call must not resurrect the panel.
     controller.mount(recognizedState());
     expect(document.body.querySelector(OVERLAY_HOST_TAG)).toBeNull();

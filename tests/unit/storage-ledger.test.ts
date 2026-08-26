@@ -68,8 +68,7 @@ describe("plan record allowlist", () => {
 
   it("rejects float money values at the seam", () => {
     expect(() => validatePlanRecord({ ...validPlan, perInstallmentCents: 22.49 })).toThrow(
-      /integer cents/,
-    );
+      /integer cents/,);
   });
 
   it("rejects out-of-bounds installment counts and unknown enum values", () => {
@@ -87,8 +86,7 @@ describe("settings allowlist", () => {
 
   it("rejects unknown settings keys", () => {
     expect(() => validateSettings({ measurementEnabled: false, extra: 1 })).toThrow(
-      StorageSchemaError,
-    );
+      StorageSchemaError,);
   });
 });
 
@@ -106,8 +104,7 @@ describe("PlanLedger — the single validated writer", () => {
     const store = memoryStore();
     const ledger = new PlanLedger(store);
     await expect(ledger.addPlan({ ...validPlan, merchant: "x" })).rejects.toThrow(
-      StorageSchemaError,
-    );
+      StorageSchemaError,);
     expect(store.data).toEqual({});
   });
 

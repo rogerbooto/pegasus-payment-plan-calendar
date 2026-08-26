@@ -1,5 +1,5 @@
 {
-  "finding": "M11-T06",
+  "finding": "T06",
   "category": "strikethrough-sale",
   "describes": "CSS line-through (not a <del>) beside the current sale price",
   "expectedSelectedText": "CAD 37.50"

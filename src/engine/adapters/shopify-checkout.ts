@@ -2,7 +2,7 @@
  * Platform adapter: shopify-checkout. Shopify controls this DOM as a single
  * vendor (post-Checkout-Extensibility, merchants can no longer arbitrarily
  * rewrite checkout DOM), which is why this is the flagship launch adapter
- * covering the largest merchant long tail from one parser (D6 §B).
+ * covering the largest merchant long tail from one parser.
  *
  * Every selector, host and pattern this adapter uses is DATA, read from the
  * bundled, validated config (src/config/adapters.config.json via
@@ -16,7 +16,7 @@ import { CONFIG_SCHEMA_VERSION } from "../../shared/constants";
 import { BUNDLED_CONFIG } from "../../config/bundled";
 import { extractAdapterAnchors, locateAdapterAnchors, matchAdapterConfig } from "../adapter-common";
 
-/** Static, never computed from page data (D6 §A.3). Highest of the three: Shopify is the flagship. */
+/** Static, never computed from page data. Highest of the three: Shopify is the flagship. */
 export const shopifyCheckoutAdapterSpecificity = 30;
 
 export const shopifyCheckoutAdapter: CheckoutAdapter = {
@@ -26,8 +26,7 @@ export const shopifyCheckoutAdapter: CheckoutAdapter = {
     return matchAdapterConfig(
       page,
       BUNDLED_CONFIG.adapters.get("shopify-checkout"),
-      shopifyCheckoutAdapterSpecificity,
-    );
+      shopifyCheckoutAdapterSpecificity,);
   },
   locate(page: PageProbe): AnchorSet | null {
     return locateAdapterAnchors(page, BUNDLED_CONFIG.adapters.get("shopify-checkout"));

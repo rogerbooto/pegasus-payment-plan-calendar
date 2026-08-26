@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * The three launch adapters (D6 §B), exercised end-to-end (match -> locate
+ * The three launch adapters, exercised end-to-end (match -> locate
  * -> extract) against real fixtures and the real bundled config -- proves
  * the adapters are genuinely data-driven (src/config/adapters.config.json),
  * not hardcoded selector soup, and that the shared extraction/confidence
@@ -95,8 +95,7 @@ describe("stripeHostedAdapter", () => {
   it("partial-schedule-in-redirect fixture: the total hard-gates, the instalment scalars stay missing (schedule finalizes off-page)", () => {
     const sidecar = loadFixtureSidecar<AdapterFixtureExpectation>(
       "adapters/stripe-hosted",
-      "partial-schedule-in-redirect",
-    );
+      "partial-schedule-in-redirect",);
     const doc = mountFixture("adapters/stripe-hosted", "partial-schedule-in-redirect");
     const page = pageProbeFor(doc, host, path);
     expect(stripeHostedAdapter.match(page).matched).toBe(true);
@@ -129,7 +128,7 @@ describe("whopAdapter", () => {
 describe("adapters disabled by a broken bundled config never crash and never widen capture", () => {
   it("locate()/extract() with a config lookup that fails to find the adapter entry degrade honestly, they don't throw", () => {
     // Simulates the "config validation disabled this adapter entirely"
-    // path (D6 §C.2) at the seam every adapter shares, without mutating
+    // path at the seam every adapter shares, without mutating
     // the real bundled singleton (which every other test in this file
     // depends on staying valid).
     const adapters: readonly CheckoutAdapter[] = [shopifyCheckoutAdapter, stripeHostedAdapter, whopAdapter];
@@ -137,8 +136,7 @@ describe("adapters disabled by a broken bundled config never crash and never wid
       // extract() with an empty AnchorSet (as if locate() had found nothing
       // but was still called) must never throw and must degrade honestly.
       expect(() =>
-        adapter.extract({ orderTotal: null, installmentCluster: null, providerWidget: null }, extractionCore),
-      ).not.toThrow();
+        adapter.extract({ orderTotal: null, installmentCluster: null, providerWidget: null }, extractionCore),).not.toThrow();
     }
   });
 });

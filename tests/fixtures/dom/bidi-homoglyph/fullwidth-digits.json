@@ -1,5 +1,5 @@
 {
-  "finding": "M11-T03",
+  "finding": "T03",
   "category": "bidi-homoglyph",
   "describes": "fullwidth digits",
   "expectedResult": "ok",

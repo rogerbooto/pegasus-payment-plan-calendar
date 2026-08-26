@@ -1,6 +1,6 @@
 /**
  * Every user-facing string on the overlay and popup surfaces, centralized
- * per M11-M1-IMPACT-VIEW-SPEC.md §5. These strings were checked against the
+ * per the design spec These strings were checked against the
  * full BLOCKED_COPY_PATTERNS list and are final: this module renders them
  * verbatim and never rewords, improves, or appends to them. Template
  * functions only substitute the named placeholders the spec defines; they
@@ -53,7 +53,7 @@ export const CADENCE_CHOOSE_ONE = "Choose one";
 
 /**
  * The popup's own empty-ledger line, verbatim from
- * mockups/degraded-and-manual-entry.html's "Before there are any plans"
+ * the approved design's "Before there are any plans"
  * case — distinct from EMPTY_LEDGER (§4.9), which renders inside an active
  * impact view. This string stands alone, so it is used where no candidate
  * is under consideration: the toolbar popup with zero saved plans.

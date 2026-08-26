@@ -1,5 +1,5 @@
 /**
- * The confidence model's threshold arithmetic (D6 §D.2): all four scalars
+ * The confidence model's threshold arithmetic: all four scalars
  * hard-gated and soft score >= 4/6 => PARSED_CONFIRMABLE; all four
  * hard-gated but soft score below the floor => PARTIAL; fewer than four
  * hard-gated => PARTIAL with the passing subset, or DEGRADED when the

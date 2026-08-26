@@ -6,7 +6,7 @@
  * toolbar (declared as `action.default_popup` in the manifest) — no page
  * can make it appear and no page can put anything inside it, which is
  * exactly what makes it the one place genuineness language and the
- * Pegasus mention are allowed (T14, D5 §D).
+ * Pegasus mention are allowed (T14, the design spec).
  *
  * T14: nothing in this file is a credential/PII input. The email invite is
  * a link-out (`window.open`/`chrome.tabs.create` to a static, developer-
@@ -164,8 +164,7 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
         el("p", {
           className: "summary",
           children: [text(`${parts.lead} `), el("b", { text: parts.sum }), text(` ${parts.mid} `), el("b", { text: parts.n }), text(` ${parts.tail}`)],
-        }),
-      );
+        }),);
     }
 
     body.appendChild(
@@ -179,8 +178,7 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
             on: { click: () => go("manual") },
           }),
         ],
-      }),
-    );
+      }),);
 
     const settings = await getSettings();
     const switches = el("div", { attrs: { style: "margin-top:16px" } });
@@ -189,8 +187,7 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
     switches.appendChild(
       switchRow(copy.SWITCH_COUNT, settings.measurementEnabled, (v) => {
         void ledger.writeSettings({ measurementEnabled: v }).then(render);
-      }),
-    );
+      }),);
     body.appendChild(switches);
 
     const usage = await readUsageFlags(store);
@@ -418,8 +415,7 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
             },
           }),
         ],
-      }),
-    );
+      }),);
 
     container.appendChild(section);
   }

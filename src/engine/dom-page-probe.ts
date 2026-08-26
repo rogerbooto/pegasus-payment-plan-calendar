@@ -1,6 +1,6 @@
 /**
  * The one PageProbe implementation backed by a real Document. Adapters and
- * the generic detector never touch `document`/`window` directly (D6 §A.3:
+ * the generic detector never touch `document`/`window` directly (the design spec:
  * "adapters never touch `document` directly ... impossible for an adapter
  * to acquire capabilities the engine didn't grant"); this is the seam that
  * does, and it grants nothing beyond read-only querying.

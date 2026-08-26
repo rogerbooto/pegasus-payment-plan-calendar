@@ -27,23 +27,19 @@ describe("confirmPlan — the T01 gate's runtime validation", () => {
 
   it("rejects a zero or negative confirmed amount — confirmation cannot launder an invalid number", () => {
     expect(() =>
-      confirmPlan({ confirmed: true, values: { ...validValues, orderTotalCents: assertCents(0, "x") } }),
-    ).toThrow(MoneyError);
+      confirmPlan({ confirmed: true, values: { ...validValues, orderTotalCents: assertCents(0, "x") } }),).toThrow(MoneyError);
   });
 
   it("rejects an out-of-bounds installment count", () => {
     expect(() => confirmPlan({ confirmed: true, values: { ...validValues, installmentCount: 1 } })).toThrow(
-      MoneyError,
-    );
+      MoneyError,);
     expect(() => confirmPlan({ confirmed: true, values: { ...validValues, installmentCount: 25 } })).toThrow(
-      MoneyError,
-    );
+      MoneyError,);
   });
 
   it("rejects a non-integer installment count", () => {
     expect(() => confirmPlan({ confirmed: true, values: { ...validValues, installmentCount: 4.5 } })).toThrow(
-      MoneyError,
-    );
+      MoneyError,);
   });
 
   it("rejects an unknown cadence or currency even if the type checker was bypassed", () => {

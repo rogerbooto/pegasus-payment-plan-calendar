@@ -93,8 +93,7 @@ describe("PopupApp — hero view", () => {
     await createPopupApp(el, { store }).init();
 
     const countSwitch = [...el.querySelectorAll('[role="switch"]')].find(
-      (s) => s.getAttribute("aria-labelledby") && el.querySelector(`#${s.getAttribute("aria-labelledby")}`)?.textContent?.includes("Count how often"),
-    ) as HTMLButtonElement;
+      (s) => s.getAttribute("aria-labelledby") && el.querySelector(`#${s.getAttribute("aria-labelledby")}`)?.textContent?.includes("Count how often"),) as HTMLButtonElement;
     expect(countSwitch.getAttribute("aria-checked")).toBe("false");
 
     countSwitch.click();

@@ -136,8 +136,7 @@ function buildCalendar(
   today: IsoDate,
   windowEnd: IsoDate,
   daysByDate: ReadonlyMap<string, { count: number; totalCents: Cents }>,
-  pendingDates: ReadonlySet<string>,
-): HTMLDivElement {
+  pendingDates: ReadonlySet<string>,): HTMLDivElement {
   const wrap = el("div", { className: "calwrap", attrs: { "aria-hidden": "true" } });
   const [ty, tm] = today.split("-").map((s) => parseInt(s, 10));
   const months: [number, number][] = [
@@ -289,8 +288,7 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
         attrs: { type: "button", "aria-label": copy.DISMISS_LABEL },
         text: "×",
         on: { click: () => dismiss() },
-      }),
-    );
+      }),);
     if (!opts.back) {
       head.appendChild(
         el("button", {
@@ -298,8 +296,7 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
           attrs: { type: "button", "aria-label": collapsed ? copy.EXPAND_LABEL : copy.COLLAPSE_LABEL },
           text: collapsed ? "▾" : "▴",
           on: { click: () => toggleCollapse() },
-        }),
-      );
+        }),);
     }
     root.appendChild(head);
   }
@@ -312,8 +309,7 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
           el("span", { text: copy.QUALIFIER_SOURCE }),
           el("span", { text: copy.QUALIFIER_LOCAL }),
         ],
-      }),
-    );
+      }),);
   }
 
   function tabs(root: HTMLElement, savedCount: number): boolean {
@@ -378,8 +374,7 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
           text(" on "),
           ...dateSpans(dates),
         ],
-      }),
-    );
+      }),);
   }
 
   function renderSameDay(body: HTMLElement, count: number, dateIso: string, sumCents: Cents, currency: "CAD" | "USD", added: boolean): void {
@@ -388,8 +383,7 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
       el("p", {
         className: "sameday",
         children: [text(`${line.lead} ${line.date} — `), el("b", { text: line.sum }), text(" that day.")],
-      }),
-    );
+      }),);
   }
 
   function renderRows(body: HTMLElement, payments: readonly { date: string; amountCents: Cents }[], currency: "CAD" | "USD", tagged: boolean): void {
@@ -418,8 +412,7 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
         body,
         state.candidate.installmentCount,
         formatCents(state.candidate.perInstallmentCents, state.candidate.currency),
-        impact.planPayments.map((p) => p.date),
-      );
+        impact.planPayments.map((p) => p.date),);
       if (impact.sameDayClusters.length > 0) {
         const cluster = impact.sameDayClusters[0] as (typeof impact.sameDayClusters)[number];
         renderSameDay(body, cluster.existingCount, cluster.date, cluster.existingTotalCents, state.candidate.currency, false);
@@ -434,8 +427,7 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
           attrs: { type: "button" },
           text: copy.ACTION_CHECK,
           on: { click: () => openConfirm() },
-        }),
-      );
+        }),);
       if (existing.length < 1) actions.appendChild(el("span", { className: "tag", text: copy.NOT_ADDED_TAG }));
       body.appendChild(actions);
     } else {
@@ -449,8 +441,7 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
       el("p", {
         className: "summary",
         children: [text(`${sumParts.lead} `), el("b", { text: sumParts.sum }), text(` ${sumParts.mid} `), el("b", { text: sumParts.n }), text(` ${sumParts.tail}`)],
-      }),
-    );
+      }),);
 
     const daysByDate = new Map<string, { count: number; totalCents: Cents }>();
     for (const d of impact.next30Days.days) daysByDate.set(d.date, { count: d.payments.length, totalCents: d.dayTotalCents });
@@ -461,8 +452,7 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
       el("p", {
         className: "callegend",
         text: "Dashed outline: a day this plan would add a payment to. Dates beyond the window are outside these 30 days.",
-      }),
-    );
+      }),);
 
     const rows = el("ul", { className: "rows" });
     for (const day of impact.next30Days.days) {
@@ -494,8 +484,7 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
         attrs: { type: "button" },
         text: copy.ACTION_CHECK,
         on: { click: () => openConfirm() },
-      }),
-    );
+      }),);
     body.appendChild(actions);
   }
 
@@ -531,8 +520,7 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
         attrs: { type: "button" },
         text: copy.ACTION_ADD,
         on: { click: () => openManual() },
-      }),
-    );
+      }),);
     body.appendChild(actions);
   }
 
@@ -560,8 +548,7 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
         className: "impact",
         attrs: { style: "margin-top:15px" },
         children: [text(`${sumParts.lead} `), el("b", { text: sumParts.sum }), text(` ${sumParts.mid} `), el("b", { text: sumParts.n }), text(` ${sumParts.tail}`)],
-      }),
-    );
+      }),);
 
     const clusterDay = agg.days.find((d) => d.date === plan.firstPaymentDate && d.count >= 2);
     if (clusterDay) {
@@ -577,8 +564,7 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
             el("span", { className: "dow", text: formatWeekday(day.date) }),
             el("span", { className: "amt", text: formatCents(day.totalCents, plan.currency) }),
           ],
-        }),
-      );
+        }),);
     }
     body.appendChild(rows);
   }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * M11-T01 (Critical) — no scraped scalar reaches the impact engine or
+ * T01 (Critical) — no scraped scalar reaches the impact engine or
  * storage without a mandatory user confirmation, enforced structurally:
  * `ConfirmedPlanInput` is a distinct branded type producible only by
  * `confirmPlan({ confirmed: true, ... })`. This file proves both halves:
@@ -13,7 +13,7 @@
  *     number" a merchant renders never reaches the engine unless a human
  *     explicitly confirmed exactly that number.
  *
- * M11-T05 lives in this file too: the stored/computed value is the exact
+ * T05 lives in this file too: the stored/computed value is the exact
  * snapshot the user confirmed, proven against a DOM node that mutates
  * after the snapshot is taken.
  */
@@ -90,8 +90,7 @@ describe("T01 — the runtime gate: computeImpact only ever reflects a confirmed
     const doc = mountFixture("friendlier-number", "per-month-shown-as-plan-total");
     const sidecar = loadFixtureSidecar<{ realOrderTotalCents: number; perInstallmentCents: number; installmentCount: number }>(
       "friendlier-number",
-      "per-month-shown-as-plan-total",
-    );
+      "per-month-shown-as-plan-total",);
     const heroText = doc.getElementById("hero")?.textContent ?? "";
     const heroParsed = parseMoneyToCents(heroText.replace("Only ", "").replace(" today!", ""));
     // The hero figure IS the per-installment amount, not the order total —
@@ -123,8 +122,7 @@ describe("T05 — the confirmed value is a snapshot, never re-read from a mutate
     const doc = mountFixture("post-confirm-mutation", "price-node-mutates-after-parse");
     const sidecar = loadFixtureSidecar<{ snapshotText: string; mutatedText: string }>(
       "post-confirm-mutation",
-      "price-node-mutates-after-parse",
-    );
+      "price-node-mutates-after-parse",);
     const node = doc.getElementById("total");
     if (!node) throw new Error("fixture drift: expected #total node");
     expect(node.textContent).toBe(sidecar.snapshotText);

@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 /**
- * The generic detector (D6 §A.2): checkout/instalment-offer presence
+ * The generic detector: checkout/instalment-offer presence
  * scoring, and the "caps at PARTIAL in practice, not by an artificial
  * ceiling" property -- a fully hard-gated generic candidate still falls
  * short of PARSED_CONFIRMABLE because it lacks the adapter_path soft
- * signal, which is exactly the intended behaviour (D6 §A.2's own framing:
+ * signal, which is exactly the intended behaviour (the design spec's own framing:
  * "its real job is to make degradation specific and honest... rather than
  * to compete with adapters on precision").
  */

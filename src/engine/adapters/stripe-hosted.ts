@@ -1,6 +1,6 @@
 /**
  * Platform adapter: stripe-hosted (checkout.stripe.com). Single stable
- * host, single vendor, conservative DOM (D6 §B) -- cheapest adapter per
+ * host, single vendor, conservative DOM -- cheapest adapter per
  * unit of coverage. Full schedules often finalize inside the provider
  * redirect, so PARTIAL is an expected, honest outcome here more often than
  * on Shopify, not a bug.
@@ -16,7 +16,7 @@ import { CONFIG_SCHEMA_VERSION } from "../../shared/constants";
 import { BUNDLED_CONFIG } from "../../config/bundled";
 import { extractAdapterAnchors, locateAdapterAnchors, matchAdapterConfig } from "../adapter-common";
 
-/** Static, never computed from page data (D6 §A.3). */
+/** Static, never computed from page data. */
 export const stripeHostedAdapterSpecificity = 20;
 
 export const stripeHostedAdapter: CheckoutAdapter = {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * M11-T06 — hidden/offscreen/aria-hidden/struck-through decoy nodes never
+ * T06 — hidden/offscreen/aria-hidden/struck-through decoy nodes never
  * win; two visible, unequal candidates degrade rather than pick one. Both
  * branches (agreeing decoy: harmless; disagreeing decoy: must resolve to
  * the visible node only) are tested, plus an explicit inversion check that
@@ -15,7 +15,7 @@ function allDivsOrDels(doc: Document): Element[] {
   return [...doc.querySelectorAll("div, del, span")];
 }
 
-describe("M11-T06 test_decoy_and_disagreeing_totals_degrade", () => {
+describe("T06 test_decoy_and_disagreeing_totals_degrade", () => {
   it("a hidden (aria-hidden) decoy never wins over the real, visible total", () => {
     const doc = mountFixture("hidden-decoy", "visible-price-with-hidden-lower-decoy");
     const decoy = doc.getElementById("decoy");
@@ -79,7 +79,7 @@ describe("M11-T06 test_decoy_and_disagreeing_totals_degrade", () => {
   });
 });
 
-describe("M11-T06 strikethrough-sale sub-case", () => {
+describe("T06 strikethrough-sale sub-case", () => {
   it("a <del>-wrapped original price is filtered; the sale price wins", () => {
     const doc = mountFixture("strikethrough-sale", "struck-original-vs-sale-price");
     const was = doc.getElementById("was");
@@ -100,7 +100,7 @@ describe("M11-T06 strikethrough-sale sub-case", () => {
   });
 });
 
-describe("M11-T06/T07 per-month-vs-total binding sub-case", () => {
+describe("T06/T07 per-month-vs-total binding sub-case", () => {
   it("the money parser never truncates a cadence-suffixed string into a bare amount", () => {
     const doc = mountFixture("per-month-vs-total", "free-floating-per-month-not-bound-to-count");
     const perMonth = doc.getElementById("permonth");

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * M11-T02 — the parser resolves currency/locale deterministically or
+ * T02 — the parser resolves currency/locale deterministically or
  * returns unrecognized; it never guesses on ambiguous separators/currency.
  * Universally quantified over the fixture corpus, not one example: a
  * partial regression that fixes one convention and breaks another must
@@ -29,7 +29,7 @@ const names = readdirSync(FIXTURE_DIR)
   .filter((f) => f.endsWith(".html"))
   .map((f) => f.replace(/\.html$/, ""));
 
-describe("M11-T02 test_ambiguous_locale_never_returns_a_number — the full locale-currency corpus", () => {
+describe("T02 test_ambiguous_locale_never_returns_a_number — the full locale-currency corpus", () => {
   it("names at least one fixture per required grammar shape (corpus sanity — a guard cannot pass on zero fixtures)", () => {
     expect(names.length).toBeGreaterThanOrEqual(8);
   });
@@ -58,7 +58,7 @@ describe("M11-T02 test_ambiguous_locale_never_returns_a_number — the full loca
     });
   }
 
-  it("D6 §E.1's named example: a single dot with three trailing digits is ambiguous, never accepted", () => {
+  it("the design spec's named example: a single dot with three trailing digits is ambiguous, never accepted", () => {
     const result = parseMoneyToCents("USD 1.234");
     expect(result.kind).toBe("rejected");
     if (result.kind === "rejected") expect(result.reason).toBe("ambiguous_separators");

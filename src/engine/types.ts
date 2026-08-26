@@ -49,8 +49,7 @@ export interface ExtractionCore {
   arithmeticConsistent(
     installmentCount: number,
     perInstallmentCents: Cents,
-    orderTotalCents: Cents,
-  ): boolean;
+    orderTotalCents: Cents,): boolean;
 }
 
 export interface CheckoutAdapter {

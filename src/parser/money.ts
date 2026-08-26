@@ -4,14 +4,14 @@
  * strict grammar, or it is rejected with a closed reason. There is no
  * best-effort mode, no rounding of malformed input, and no default value.
  *
- * Grammar (D6 §F): an optional, explicit CAD/USD currency marker; digit
+ * Grammar: an optional, explicit CAD/USD currency marker; digit
  * groups with a consistent group separator; at most one decimal separator;
  * exactly 0 or 2 fraction digits. Cents are constructed by integer
  * arithmetic on the digit string via centsFromDigitStrings (never float
  * parsing). A single separator whose shape fits neither the EN-CA/US
  * grammar (comma = grouping, dot = decimal) nor the FR-CA grammar
  * (comma = decimal) is ambiguous and is rejected, never guessed — this is
- * the exact "1.234 with no other evidence" case named in D6 §E.1.
+ * the exact "1.234 with no other evidence" case named in the design spec
  *
  * This module does not itself strip bidi/zero-width/homoglyph characters —
  * that is src/parser/unicode.ts's job, run before this one at the call
@@ -58,7 +58,7 @@ const SUFFIX_MARKERS: ReadonlyArray<{ pattern: RegExp; currency: Currency }> = [
   { pattern: /\s+USD$/i, currency: "USD" },
   // The FR-CA trailing bare-$ form ("37,50 $"). A LEADING bare "$" is
   // deliberately NOT accepted here (see extractCurrency) — that is exactly
-  // the "$ alone in a CA context" ambiguity D6 §E.1 names as an attack: a
+  // the "$ alone in a CA context" ambiguity the design spec names as an attack: a
   // leading bare $ could be CAD or USD, so it is rejected, never guessed.
   { pattern: /\s*\$$/, currency: "CAD" },
 ];
@@ -140,7 +140,7 @@ function splitOnOneSeparatorKind(text: string, sep: "," | "."): NumericSplit | M
       return { wholeDigits: intPart + fracPart, fractionDigits: "" };
     }
     if (sep === "." && fracPart.length === 3) {
-      // D6 §E.1's named example: dot is our locales' decimal separator, so
+      // the design spec's named example: dot is our locales' decimal separator, so
       // a 3-digit tail after a single dot fits neither grammar cleanly.
       return "ambiguous_separators";
     }
@@ -205,7 +205,7 @@ export function parseMoneyToCents(raw: string): MoneyParseResult {
 }
 
 /**
- * D6 §D.2 hard gate 3 / D3 T07: |count x perInstallment - orderTotal| <=
+ * the design spec hard gate 3 / D3 T07: |count x perInstallment - orderTotal| <=
  * count (cents) — the standard pay-in-four rounding tolerance, the first
  * installment absorbing the remainder. A larger delta (typically tax or
  * shipping folded into the total after the instalment widget was quoted)
@@ -215,8 +215,7 @@ export function parseMoneyToCents(raw: string): MoneyParseResult {
 export function arithmeticConsistent(
   installmentCount: number,
   perInstallmentCents: Cents,
-  orderTotalCents: Cents,
-): boolean {
+  orderTotalCents: Cents,): boolean {
   const product = multiplyCents(perInstallmentCents, installmentCount);
   const delta = Math.abs(product - orderTotalCents);
   return delta <= arithmeticToleranceCents(installmentCount);

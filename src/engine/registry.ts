@@ -30,8 +30,7 @@ export const ADAPTER_REGISTRY: readonly CheckoutAdapter[] = [
  */
 export function selectAdapterFrom(
   adapters: readonly CheckoutAdapter[],
-  page: PageProbe,
-): CheckoutAdapter | null {
+  page: PageProbe,): CheckoutAdapter | null {
   let winner: CheckoutAdapter | null = null;
   let winningSpecificity = -1;
   for (const adapter of adapters) {

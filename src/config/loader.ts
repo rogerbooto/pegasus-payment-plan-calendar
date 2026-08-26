@@ -147,8 +147,7 @@ function validatePatterns(patterns: unknown, errors: string[], where: string): v
 function validateAdapter(
   id: string,
   raw: unknown,
-  manifestHosts: readonly string[],
-): { config?: AdapterConfig; errors: string[] } {
+  manifestHosts: readonly string[],): { config?: AdapterConfig; errors: string[] } {
   const errors: string[] = [];
   if (!isRecord(raw)) return { errors: ["adapter config must be an object"] };
   for (const key of Object.keys(raw)) {

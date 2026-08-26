@@ -1,5 +1,5 @@
 /**
- * Shared match/locate/extract logic for every platform adapter (D6 §A.1:
+ * Shared match/locate/extract logic for every platform adapter (the design spec:
  * "never one adapter per merchant" -- here, not even duplicated per
  * *platform*). Each of src/engine/adapters/{shopify-checkout,stripe-hosted,
  * whop}.ts is a thin composition over this module and its own entry in the
@@ -25,7 +25,7 @@ function normalizedText(el: Element): string {
  * validated config) plus one CSS probe. O(small-constant) -- the probe only
  * runs the adapter's own (length-capped) selector lists, never a page-wide
  * scan. `config === undefined` means the bundled config failed validation
- * for this adapter (src/config/loader.ts); per D6 §C.2 that disables the
+ * for this adapter (src/config/loader.ts); per the design spec that disables the
  * adapter entirely -- `match` reports no match, and the engine falls
  * through to the generic detector exactly as if the platform weren't
  * covered at all.
@@ -33,8 +33,7 @@ function normalizedText(el: Element): string {
 export function matchAdapterConfig(
   page: PageProbe,
   config: AdapterConfig | undefined,
-  specificity: number,
-): MatchResult {
+  specificity: number,): MatchResult {
   if (!config) return { matched: false, specificity };
   if (!config.hosts.includes(page.host)) return { matched: false, specificity };
   if (!config.pathPatterns.some((prefix) => page.path.startsWith(prefix))) return { matched: false, specificity };
@@ -65,7 +64,7 @@ const PLACEHOLDER_CONFIDENCE = { hardGatesPassed: false, softScore: 0, signals: 
 
 /**
  * Extracts the four scalars from already-located anchors, through the
- * injected ExtractionCore only (D6 §A.1.3) -- this function locates
+ * injected ExtractionCore only -- this function locates
  * nothing itself and decides no adapter-specific business rule; it is the
  * one place all three adapters turn `AnchorSet` + config patterns into an
  * `EngineState`.
@@ -73,8 +72,7 @@ const PLACEHOLDER_CONFIDENCE = { hardGatesPassed: false, softScore: 0, signals: 
 export function extractAdapterAnchors(
   anchors: AnchorSet,
   config: AdapterConfig | undefined,
-  core: ExtractionCore,
-): EngineState {
+  core: ExtractionCore,): EngineState {
   if (!config) return { kind: "DEGRADED", reason: "adapter_error" };
 
   const signals: SoftSignal[] = ["adapter_path"];
@@ -132,9 +130,8 @@ export function extractAdapterAnchors(
     orderTotalCents !== undefined &&
     perInstallmentCents !== undefined &&
     installmentCount !== undefined &&
-    !core.arithmeticConsistent(installmentCount, perInstallmentCents, orderTotalCents)
-  ) {
-    // Hard gate 3 failure (D6 §D.2 / D3 T07): drop the money pair; count
+    !core.arithmeticConsistent(installmentCount, perInstallmentCents, orderTotalCents)) {
+    // Hard gate 3 failure (the design spec / D3 T07): drop the money pair; count
     // and cadence may still stand alone as passing scalars.
     orderTotalCents = undefined;
     perInstallmentCents = undefined;

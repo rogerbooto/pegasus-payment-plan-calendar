@@ -4,7 +4,7 @@
  * the phrase names a cadence this product doesn't model (e.g. "every 3
  * weeks" has no WEEKLY/BIWEEKLY/MONTHLY equivalent). Unresolved cadence is
  * a missing scalar upstream, never a guess -- the same "never guessed"
- * posture as the money parser (D6 §D.2).
+ * posture as the money parser.
  */
 import type { Cadence } from "../shared/types";
 

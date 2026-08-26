@@ -1,5 +1,5 @@
 /**
- * D6 §A.3 precedence rule: highest static specificity wins; ties break by
+ * the design spec precedence rule: highest static specificity wins; ties break by
  * registry order; a throwing match() is equivalent to "no match". Tested
  * against the parameterized selectAdapterFrom() with fake adapters, so a
  * genuine tie-break scenario can be constructed (the real bundled adapters

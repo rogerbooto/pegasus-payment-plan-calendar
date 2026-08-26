@@ -1,7 +1,7 @@
 /**
  * The overlay's own stylesheet, scoped entirely inside the closed shadow
  * root (T12). Token values and measured contrast ratios are carried across
- * from mockups/impact-view.html and M11-M1-IMPACT-VIEW-SPEC.md §8.4 — this
+ * from the approved design and the design spec — this
  * file does not invent new colours or thresholds. `:host { all: initial }`
  * is the explicit reset at the boundary: nothing the host page does to
  * `*`/`body`/inherited properties reaches inside, and nothing in here is

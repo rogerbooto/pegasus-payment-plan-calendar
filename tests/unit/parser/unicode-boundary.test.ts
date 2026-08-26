@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * M11-T03 — bidi overrides, zero-width controls and unrecognized scripts
+ * T03 — bidi overrides, zero-width controls and unrecognized scripts
  * are rejected; the three named unambiguous non-ASCII digit blocks
  * (Eastern Arabic-Indic, Extended Arabic-Indic, fullwidth) normalize to an
  * exact, authored ground-truth value. No partial credit: the assertion is
@@ -26,7 +26,7 @@ const names = readdirSync(FIXTURE_DIR)
   .filter((f) => f.endsWith(".html"))
   .map((f) => f.replace(/\.html$/, ""));
 
-describe("M11-T03 test_bidi_zwsp_homoglyph_rejected_or_normalized_to_ground_truth", () => {
+describe("T03 test_bidi_zwsp_homoglyph_rejected_or_normalized_to_ground_truth", () => {
   it("names at least one control-char fixture and one digit-block fixture (corpus sanity)", () => {
     expect(names.length).toBeGreaterThanOrEqual(6);
   });

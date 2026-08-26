@@ -25,8 +25,7 @@ export type Cents = number & { readonly [centsBrand]: "cents" };
 export function assertCents(value: unknown, field: string): Cents {
   if (typeof value !== "number" || !Number.isSafeInteger(value)) {
     throw new MoneyError(
-      `${field} must be integer cents, got ${typeof value === "number" ? value : typeof value}`,
-    );
+      `${field} must be integer cents, got ${typeof value === "number" ? value : typeof value}`,);
   }
   return value as Cents;
 }
@@ -55,8 +54,7 @@ export function centsFromDigitStrings(whole: string, fraction: string, field: st
   }
   if (fraction !== "" && !/^[0-9]{2}$/.test(fraction)) {
     throw new MoneyError(
-      `${field}: fraction part must be empty or exactly two digits, got ${JSON.stringify(fraction)}`,
-    );
+      `${field}: fraction part must be empty or exactly two digits, got ${JSON.stringify(fraction)}`,);
   }
   const wholePart = parseInt(whole, 10);
   const fractionPart = fraction === "" ? 0 : parseInt(fraction, 10);

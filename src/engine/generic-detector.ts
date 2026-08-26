@@ -30,7 +30,7 @@ function normalizedText(el: Element): string {
 
 /**
  * (i) Checkout presence -- score-based, all signals structural, none
- * merchant-specific (D6 §A.2(i)). Requires at least two of the three signal
+ * merchant-specific (the design spec(i)). Requires at least two of the three signal
  * families (URL path, a labelled+money-parsing total row, a payment
  * affordance) so a single coincidental hit (e.g. an unrelated page whose
  * path happens to contain "/pay/") doesn't register as a checkout.
@@ -53,7 +53,7 @@ export function detectCheckout(page: PageProbe): boolean {
 
 /**
  * (ii) BNPL option offered -- either signal family suffices to DETECT
- * (D6 §A.2(ii)); both are independently checked, neither implies the other.
+ * (the design spec(ii)); both are independently checked, neither implies the other.
  */
 export function detectInstallmentOffer(page: PageProbe): boolean {
   if (locateProviderWidget(page, GENERIC_PROVIDER_WIDGET_CSS, GENERIC_PROVIDER_WIDGET_IFRAME_ORIGINS)) {
@@ -67,7 +67,7 @@ const PLACEHOLDER_CONFIDENCE = { hardGatesPassed: false, softScore: 0, signals: 
 /**
  * Scalar extraction (generic path). Order total from the labelled
  * final-total row; count/cadence/per-instalment from the bound instalment
- * phrase cluster. The money/arithmetic half of the shared core (D6 §A.1.3)
+ * phrase cluster. The money/arithmetic half of the shared core
  * is used here, at extraction time, exactly as an adapter's extract() uses
  * it -- this function locates and binds text; it never itself decides what
  * counts as money or as a resolved currency.
@@ -132,9 +132,8 @@ export function extractGeneric(page: PageProbe, core: ExtractionCore): EngineSta
     orderTotalCents !== undefined &&
     perInstallmentCents !== undefined &&
     installmentCount !== undefined &&
-    !core.arithmeticConsistent(installmentCount, perInstallmentCents, orderTotalCents)
-  ) {
-    // Hard gate 3 failure (D6 §D.2 / D3 T07): drop the money pair; count
+    !core.arithmeticConsistent(installmentCount, perInstallmentCents, orderTotalCents)) {
+    // Hard gate 3 failure (the design spec / D3 T07): drop the money pair; count
     // and cadence may still stand alone as passing scalars.
     orderTotalCents = undefined;
     perInstallmentCents = undefined;

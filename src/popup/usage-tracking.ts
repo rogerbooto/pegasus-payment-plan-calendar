@@ -1,6 +1,6 @@
 /**
  * A small, local-only UI-state tracker for the popup's post-usefulness
- * email-invite gate (M11-D5-MARKETPLACE-FIREWALL.md §E.4). It persists two
+ * email-invite gate. It persists two
  * booleans — whether the 30-day view has ever been opened, and whether the
  * invite has been dismissed (by either button) — via the same validated
  * storage seam every other local-only write in this codebase uses

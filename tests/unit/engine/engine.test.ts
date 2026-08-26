@@ -1,5 +1,5 @@
 /**
- * D6 §A.3's fallback rule, tested against `runEngineWithAdapter` with fake
+ * the design spec's fallback rule, tested against `runEngineWithAdapter` with fake
  * adapters so each branch (locate() null, extract() throw, extract()
  * DEGRADED, extract() PARTIAL/PARSED_CONFIRMABLE) can be constructed
  * directly, independent of real bundled config. "Fallback is
