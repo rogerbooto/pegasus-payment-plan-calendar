@@ -73,6 +73,15 @@ export const CADENCE_OPTION_LABELS: Readonly<Record<"WEEKLY" | "BIWEEKLY" | "MON
 export const CADENCE_CHOOSE_ONE = "Choose one";
 
 /**
+ * The zero-height visible marker for a field the page did not yield,
+ * shown on the label's own line. FIELD_HINT_MISSING remains the full
+ * accessible description on the same field (visually hidden); this is its
+ * short visual echo, so the marker is aria-hidden and never doubles up in
+ * the accessible description.
+ */
+export const FIELD_FLAG_MISSING = "Not found";
+
+/**
  * The popup's own empty-ledger line, verbatim from
  * the approved design's "Before there are any plans"
  * case — distinct from EMPTY_LEDGER (§4.9), which renders inside an active

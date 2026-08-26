@@ -61,12 +61,16 @@ describe("ManualEntrySheet — orderTotalSuggestion prefills ONLY the total fiel
     expect(el.querySelector(".form__lead")?.textContent).not.toBe(copy.FORM_PARTIAL_LEAD);
   });
 
-  it("uses the empty-path title/sub, never the 'numbers we read' framing (only one number was read)", () => {
+  it("uses the empty-path title, never the 'numbers we read' framing (only one number was read); sub is suppressed because the lead line already carries the instruction", () => {
     const el = container();
     renderManualEntrySheet(el, { orderTotalSuggestion: suggestion(), onConfirm: vi.fn(), onCancel: vi.fn() });
 
     expect(el.querySelector("h3")?.textContent).toBe(copy.FORM_TITLE_EMPTY);
-    expect(el.querySelector(".form__sub")?.textContent).toBe(copy.FORM_SUB_EMPTY);
+    // The layout spec's §5.3 suppression: whenever a lead line renders, the
+    // sub does not (it would only repeat the lead's instruction). This form
+    // always has a lead (FORM_ORDER_TOTAL_ONLY_LEAD), so `.form__sub` is
+    // never present here.
+    expect(el.querySelector(".form__sub")).toBeNull();
   });
 
   it("with no orderTotalSuggestion and no prefill, renders exactly as before (no lead line, total field missing)", () => {

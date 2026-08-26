@@ -164,11 +164,14 @@ describe("§4.10 cases 2-3 — the data-theme override selectors exist on both :
   });
 });
 
-// §5.6 cases 4-5 (first-run UX spec) -- the two CSS-only assertions from
-// the preview-behaviour spec. The DOM/behavioural cases (1, 2, 3, 6) live
-// in tests/unit/overlay/confirmation-sheet-preview.test.ts, a NEW file
-// rather than an edit to confirmation-sheet.test.ts (§5.5 requires that
-// file to stay unmodified).
+// §5.6 case 4 (first-run UX spec) -- the CSS-only assertion from the
+// preview-behaviour spec. The DOM/behavioural cases (1, 2, 3, 6) live in
+// tests/unit/overlay/confirmation-sheet-preview.test.ts, a NEW file rather
+// than an edit to confirmation-sheet.test.ts (§5.5 requires that file to
+// stay unmodified). §5.6 case 5 (the submit row pinned via
+// position: sticky) is gone: the overlay-form-layout spec replaces the
+// sticky mechanism with a real panel footer outside the scroll region --
+// see "form-actions footer" below for its regression guard.
 describe("§5.6 case 4 — .echo--empty reserves zero space", () => {
   it("OVERLAY_CSS declares zero padding/margin/background for .echo--empty", () => {
     const body = ruleBody(OVERLAY_CSS, /\.echo--empty\s*\{/);
@@ -181,21 +184,6 @@ describe("§5.6 case 4 — .echo--empty reserves zero space", () => {
   it("liveness — a POPUP_CSS/OVERLAY_CSS with .echo--empty stripped is caught by the assertion above", () => {
     const sabotaged = OVERLAY_CSS.replace(/\.echo--empty\s*\{[^}]*\}/, "");
     expect(ruleBody(sabotaged, /\.echo--empty\s*\{/)).toBeNull();
-  });
-});
-
-describe("§5.6 case 5 — the form's submit row is pinned to the bottom of the scrolling panel body", () => {
-  it("OVERLAY_CSS declares position: sticky; bottom: 0 on .form__actions", () => {
-    const body = ruleBody(OVERLAY_CSS, /\.form__actions\s*\{/);
-    expect(body).not.toBeNull();
-    expect(body).toMatch(/position:\s*sticky/);
-    expect(body).toMatch(/bottom:\s*0\b/);
-  });
-
-  it("liveness — a .form__actions rule without position: sticky is caught by the assertion above", () => {
-    const sabotaged = OVERLAY_CSS.replace(/\.form__actions\s*\{[^}]*\}/, ".form__actions { bottom: 0; }");
-    const sabotagedBody = ruleBody(sabotaged, /\.form__actions\s*\{/);
-    expect(sabotagedBody).not.toMatch(/position:\s*sticky/);
   });
 });
 
@@ -230,22 +218,27 @@ describe("D5/D7 — the popup/welcome-tab surfaces fit at 375px and never resize
 });
 
 /*
- * Founder-reported regression: the pinned "Add to my calendar" / "Cancel"
- * row (`.form__actions`, sticky per §5 R4 above) visually collided with
- * whatever scrolled behind it -- an opaque row with no edge still reads as
- * two things colliding, not a layered toolbar, and the shortest surface
- * (the overlay, capped by `.panel`'s own `max-height`) showed it worst.
- * Two independent fixes, both regression-guarded below:
- *   (a) the row now paints a real top edge (--border-strong), visible in
- *       both colour schemes, so overlap reads as intentional layering;
- *   (b) the scroll reservation below the last field
- *       (`.panel__body:has(form)`'s `padding-bottom`) is now DERIVED from
- *       the same custom properties the row and its buttons render with,
- *       plus an explicit safety buffer -- not a hand-picked pixel figure
- *       that silently stops matching the row's real height once a button's
- *       own padding changes.
+ * Founder-reported regression, and the overlay-form-layout spec's
+ * replacement mechanism: the old pinned "Add to my calendar" / "Cancel"
+ * row (`.form__actions`, `position: sticky` inside the scrolling
+ * `.panel__body`) visually collided with whatever scrolled behind it --
+ * an opaque row with no edge still reads as two things colliding, not a
+ * layered toolbar. The fix is not a heavier edge treatment: `.form__actions`
+ * is now a real panel footer OUTSIDE the form's scroll region (`.form__fields`
+ * above it owns the only scrollport), so overlap is impossible by
+ * construction rather than merely disguised. What's left to regression-guard
+ * here is cosmetic and dimensional, not structural (the structural guarantee
+ * -- "not sticky", "scrollport excludes the actions" -- lives in the
+ * "overlay-form-layout" describe blocks below):
+ *   (a) the row still paints a real top edge (--border-strong), visible in
+ *       both colour schemes, now a genuine footer seam rather than
+ *       compensation for an overlap;
+ *   (b) its own padding is still built from shared tokens, not re-hardcoded
+ *       pixel values, so a later edit to one can't silently drift from the
+ *       other;
+ *   (c) the button's own min-height is still the shared --btn-min-h token.
  */
-describe("pinned form-actions row -- a visible top edge, in both colour schemes", () => {
+describe("form-actions footer -- a visible top edge and token-derived sizing, in both colour schemes", () => {
   it(".form__actions declares a border-top drawn from --border-strong (not the plainer --border, and not transparent)", () => {
     const body = ruleBody(OVERLAY_CSS, /\.form__actions\s*\{/);
     expect(body).not.toBeNull();
@@ -261,24 +254,18 @@ describe("pinned form-actions row -- a visible top edge, in both colour schemes"
   });
 
   it("liveness -- a .form__actions rule with the border-top declaration stripped is caught by the assertion above", () => {
+    // Was: the old sticky declarations this rule used to carry. Updated to
+    // the new (non-sticky, footer) shape minus border-top, so the sabotage
+    // stays representative of what a future editor could plausibly revert to.
     const sabotaged = OVERLAY_CSS.replace(
       /\.form__actions\s*\{[^}]*\}/,
-      ".form__actions { margin-top: 2px; position: sticky; bottom: 0; z-index: 1; background: var(--panel-bg); padding-top: 10px; padding-bottom: 2px; }",
+      ".form__actions { flex: 0 0 auto; margin-top: 0; background: var(--panel-bg); padding-top: 12px; padding-bottom: 12px; padding-inline: 16px; }",
     );
     const sabotagedBody = ruleBody(sabotaged, /\.form__actions\s*\{/);
     expect(sabotagedBody).not.toMatch(/border-top:/);
   });
-});
 
-describe("pinned form-actions row -- the scroll reservation is derived from the row's own declared height, not a magic number", () => {
-  /** Reads `--name: <n>px` out of LIGHT_TOKENS and returns the number of pixels. */
-  function tokenPx(name: string): number {
-    const match = new RegExp(`${name}:\\s*(\\d+(?:\\.\\d+)?)px`).exec(LIGHT_TOKENS);
-    if (!match) throw new Error(`token ${name} not found`);
-    return parseInt(match[1]!, 10);
-  }
-
-  it(".btn's min-height is the shared --btn-min-h token, not a re-hardcoded 44px (so the reservation formula tracks it)", () => {
+  it(".btn's min-height is the shared --btn-min-h token, not a re-hardcoded 44px", () => {
     const body = ruleBody(OVERLAY_CSS, /\.btn\s*\{/);
     expect(body).not.toBeNull();
     expect(body).toMatch(/min-height:\s*var\(--btn-min-h\)/);
@@ -291,53 +278,6 @@ describe("pinned form-actions row -- the scroll reservation is derived from the 
     expect(body).toMatch(/padding-bottom:\s*var\(--form-actions-pad-bottom\)/);
   });
 
-  it("--form-actions-h is a calc() built from --btn-min-h, --form-actions-pad-top, --form-actions-pad-bottom, --form-actions-border-w and --form-actions-safety -- the same tokens the row and its buttons are styled with", () => {
-    const match = /--form-actions-h:\s*calc\(([^;]+)\)/.exec(LIGHT_TOKENS);
-    expect(match).not.toBeNull();
-    const formula = match![1];
-    for (const token of [
-      "--btn-min-h",
-      "--form-actions-pad-top",
-      "--form-actions-pad-bottom",
-      "--form-actions-border-w",
-      "--form-actions-safety",
-    ]) {
-      expect(formula).toContain(`var(${token})`);
-    }
-  });
-
-  it(".panel__body:has(form) reserves var(--form-actions-h), not a re-hardcoded pixel figure", () => {
-    const body = ruleBody(OVERLAY_CSS, /\.panel__body:has\(form\)\s*\{/);
-    expect(body).not.toBeNull();
-    expect(body).toMatch(/padding-bottom:\s*var\(--form-actions-h\)/);
-    expect(body).not.toMatch(/padding-bottom:\s*\d/);
-  });
-
-  it("the reserved space (--form-actions-h) is strictly greater than the row's own minimum rendered height (button + row padding + border), by exactly the declared safety margin -- the relationship is asserted, not a hardcoded 64", () => {
-    const btnMinH = tokenPx("--btn-min-h");
-    const padTop = tokenPx("--form-actions-pad-top");
-    const padBottom = tokenPx("--form-actions-pad-bottom");
-    const borderW = tokenPx("--form-actions-border-w");
-    const safety = tokenPx("--form-actions-safety");
-
-    // The row's own minimum rendered height: the tallest child (a .btn,
-    // whose border-box is at least --btn-min-h since box-sizing is
-    // border-box everywhere) plus the row's own padding and border-top.
-    const minRenderedRowHeight = btnMinH + padTop + padBottom + borderW;
-    const reserved = minRenderedRowHeight + safety;
-
-    expect(reserved).toBeGreaterThan(minRenderedRowHeight);
-    expect(reserved - minRenderedRowHeight).toBe(safety);
-
-    // Cross-check against the actual declared --form-actions-h formula
-    // (same arithmetic, read straight out of the token block) so this
-    // test breaks if the calc() and the component tokens ever disagree.
-    const formulaMatch = /--form-actions-h:\s*calc\(([^;]+)\)/.exec(LIGHT_TOKENS);
-    const formulaTokens = formulaMatch![1]!.match(/var\((--[a-z-]+)\)/g)!.map((v) => v.slice(4, -1));
-    const formulaSum = formulaTokens.reduce((sum, name) => sum + tokenPx(name), 0);
-    expect(formulaSum).toBe(reserved);
-  });
-
   it("liveness -- reverting .btn's min-height to a re-hardcoded 44px stops it tracking --btn-min-h, caught by the assertion above", () => {
     const sabotaged = OVERLAY_CSS.replace(/\.btn\s*\{([^}]*)\}/, (_full, inner: string) =>
       `.btn {${inner.replace("min-height: var(--btn-min-h);", "min-height: 44px;")}}`,
@@ -345,38 +285,108 @@ describe("pinned form-actions row -- the scroll reservation is derived from the 
     const sabotagedBody = ruleBody(sabotaged, /\.btn\s*\{/);
     expect(sabotagedBody).not.toMatch(/min-height:\s*var\(--btn-min-h\)/);
   });
+});
 
-  it("liveness -- reverting .panel__body:has(form) to a hardcoded 64px is caught by the assertion above", () => {
-    const sabotaged = OVERLAY_CSS.replace(
-      /\.panel__body:has\(form\)\s*\{[^}]*\}/,
-      ".panel__body:has(form) { padding-bottom: 64px; }",
-    );
-    const sabotagedBody = ruleBody(sabotaged, /\.panel__body:has\(form\)\s*\{/);
-    expect(sabotagedBody).not.toMatch(/padding-bottom:\s*var\(--form-actions-h\)/);
+/*
+ * overlay-form-layout spec (docs/design/bnpl-watcher/overlay-form-layout-spec.md)
+ * §7.4 -- the structural guarantee that replaces the sticky mechanism
+ * entirely: overlap between a form field and the actions row is impossible
+ * by construction, because the actions row is no longer inside any scroll
+ * container at all.
+ */
+describe("overlay-form-layout §7.4.1 — .form__actions is not sticky", () => {
+  it("declares flex: 0 0 auto and neither position: sticky nor z-index", () => {
+    const body = ruleBody(OVERLAY_CSS, /\.form__actions\s*\{/);
+    expect(body).not.toBeNull();
+    expect(body).not.toMatch(/position:\s*sticky/);
+    expect(body).not.toMatch(/z-index/);
+    expect(body).toMatch(/flex:\s*0 0 auto/);
   });
 
-  it("liveness -- dropping --form-actions-safety from the calc() (i.e. no margin above the row's own minimum height) is caught by the relationship assertion", () => {
-    const sabotagedLightTokens = LIGHT_TOKENS.replace(
-      /--form-actions-h:\s*calc\([^;]+\)/,
-      "--form-actions-h: calc(var(--btn-min-h) + var(--form-actions-pad-top) + var(--form-actions-pad-bottom) + var(--form-actions-border-w))",
+  it("liveness -- an OVERLAY_CSS with position: sticky reintroduced on .form__actions is caught by the assertion above", () => {
+    const sabotaged = OVERLAY_CSS.replace(
+      /\.form__actions\s*\{/,
+      ".form__actions { position: sticky; bottom: 0; z-index: 1;",
     );
-    function sabotagedTokenPx(name: string): number {
-      const match = new RegExp(`${name}:\\s*(\\d+(?:\\.\\d+)?)px`).exec(sabotagedLightTokens);
-      if (!match) throw new Error(`token ${name} not found`);
-      return parseInt(match[1]!, 10);
-    }
-    const btnMinH = sabotagedTokenPx("--btn-min-h");
-    const padTop = sabotagedTokenPx("--form-actions-pad-top");
-    const padBottom = sabotagedTokenPx("--form-actions-pad-bottom");
-    const borderW = sabotagedTokenPx("--form-actions-border-w");
-    const minRenderedRowHeight = btnMinH + padTop + padBottom + borderW;
+    const body = ruleBody(sabotaged, /\.form__actions\s*\{/);
+    expect(body).toMatch(/position:\s*sticky/);
+    expect(body).toMatch(/z-index/);
+  });
+});
 
-    const formulaMatch = /--form-actions-h:\s*calc\(([^;]+)\)/.exec(sabotagedLightTokens);
-    const formulaTokens = formulaMatch![1]!.match(/var\((--[a-z-]+)\)/g)!.map((v) => v.slice(4, -1));
-    const formulaSum = formulaTokens.reduce((sum, name) => sum + sabotagedTokenPx(name), 0);
+describe("overlay-form-layout §7.4.2 — the scrollport excludes the actions row", () => {
+  it(".panel__body:has(> form) is a flex frame, .form__fields is the only scroll container, and the old reservation rule is gone", () => {
+    const frameBody = ruleBody(OVERLAY_CSS, /\.panel__body:has\(> form\)\s*\{/);
+    expect(frameBody).not.toBeNull();
+    expect(frameBody).toMatch(/overflow:\s*hidden/);
+    expect(frameBody).toMatch(/display:\s*flex/);
 
-    // Without the safety token in the formula, the reservation equals the
-    // row's bare minimum height exactly -- no margin at all.
-    expect(formulaSum).toBe(minRenderedRowHeight);
+    const fieldsBody = ruleBody(OVERLAY_CSS, /\.form__fields\s*\{/);
+    expect(fieldsBody).not.toBeNull();
+    expect(fieldsBody).toMatch(/overflow-y:\s*auto/);
+
+    expect(OVERLAY_CSS).not.toMatch(/\.panel__body:has\(form\)\s*\{/);
+  });
+
+  it("liveness -- an OVERLAY_CSS with the old .panel__body:has(form) reservation rule reintroduced is caught by the absence assertion above", () => {
+    const sabotaged = `${OVERLAY_CSS}\n.panel__body:has(form) { padding-bottom: 64px; }\n`;
+    expect(sabotaged).toMatch(/\.panel__body:has\(form\)\s*\{/);
+  });
+});
+
+describe("overlay-form-layout §7.4.3 — no orphan tokens", () => {
+  it("LIGHT_TOKENS and OVERLAY_CSS reference neither --form-actions-h nor --form-actions-safety", () => {
+    expect(LIGHT_TOKENS).not.toMatch(/--form-actions-h\b/);
+    expect(LIGHT_TOKENS).not.toMatch(/--form-actions-safety\b/);
+    expect(OVERLAY_CSS).not.toMatch(/--form-actions-h\b/);
+    expect(OVERLAY_CSS).not.toMatch(/--form-actions-safety\b/);
+  });
+
+  it("liveness -- reintroducing --form-actions-h in LIGHT_TOKENS is caught by the assertion above", () => {
+    const sabotaged = `${LIGHT_TOKENS}\n --form-actions-h: 65px;\n`;
+    expect(sabotaged).toMatch(/--form-actions-h\b/);
+  });
+});
+
+describe("overlay-form-layout §7.4.4 — .sr-only is declared after .hint", () => {
+  it("OVERLAY_CSS declares .sr-only after .hint (utilities win over component margins)", () => {
+    const hintIndex = OVERLAY_CSS.indexOf(".hint {");
+    const srOnlyIndex = OVERLAY_CSS.indexOf(".sr-only {");
+    expect(hintIndex).toBeGreaterThan(-1);
+    expect(srOnlyIndex).toBeGreaterThan(-1);
+    expect(srOnlyIndex).toBeGreaterThan(hintIndex);
+  });
+
+  it("liveness -- an ordering with .sr-only before .hint is caught by the assertion above", () => {
+    const sabotaged = ".sr-only { position: absolute; }\n.hint { margin-top: 4px; }\n";
+    expect(sabotaged.indexOf(".sr-only {")).toBeLessThan(sabotaged.indexOf(".hint {"));
+  });
+});
+
+describe("overlay-form-layout §7.4.5 — scroll does not chain to the host page", () => {
+  it(".form__fields declares overscroll-behavior: contain", () => {
+    const body = ruleBody(OVERLAY_CSS, /\.form__fields\s*\{/);
+    expect(body).not.toBeNull();
+    expect(body).toMatch(/overscroll-behavior:\s*contain/);
+  });
+
+  it("liveness -- a .form__fields rule without overscroll-behavior is caught by the assertion above", () => {
+    const body = ruleBody(OVERLAY_CSS, /\.form__fields\s*\{/)!;
+    const sabotaged = body.replace(/overscroll-behavior:\s*contain;\s*/, "");
+    expect(sabotaged).not.toMatch(/overscroll-behavior:\s*contain/);
+  });
+});
+
+describe("overlay-form-layout §7.4.6 — the grid stacks on panel width, not viewport width", () => {
+  it("OVERLAY_CSS declares a container query on ppcpanel, .panel declares the container, and the old viewport media query is gone", () => {
+    expect(OVERLAY_CSS).toMatch(/@container ppcpanel \(max-width:\s*319px\)/);
+    const panelBody = ruleBody(OVERLAY_CSS, /\.panel\s*\{/);
+    expect(panelBody).toMatch(/container:\s*ppcpanel\s*\/\s*inline-size/);
+    expect(OVERLAY_CSS).not.toMatch(/@media \(max-width:\s*420px\)/);
+  });
+
+  it("liveness -- reintroducing the old @media (max-width: 420px) rule for .grid2 is caught by the absence assertion above", () => {
+    const sabotaged = `${OVERLAY_CSS}\n@media (max-width: 420px) { .grid2 { grid-template-columns: 1fr; } }\n`;
+    expect(sabotaged).toMatch(/@media \(max-width:\s*420px\)/);
   });
 });

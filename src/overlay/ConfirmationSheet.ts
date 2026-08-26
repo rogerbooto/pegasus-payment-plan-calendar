@@ -94,6 +94,18 @@ function cadenceOptions(select: HTMLSelectElement, selected: Cadence | ""): void
   }
 }
 
+function fieldHead(spec: FieldSpec): HTMLDivElement {
+  return el("div", {
+    className: "field__head",
+    children: [
+      el("label", { attrs: { for: spec.id }, text: spec.label }),
+      spec.missing
+        ? el("span", { className: "field__flag", attrs: { "aria-hidden": "true" }, text: copy.FIELD_FLAG_MISSING })
+        : null,
+    ],
+  });
+}
+
 function textField(spec: FieldSpec, inputAttrs: Record<string, string>): {
   readonly wrap: HTMLDivElement;
   readonly input: HTMLInputElement;
@@ -111,9 +123,9 @@ function textField(spec: FieldSpec, inputAttrs: Record<string, string>): {
   const wrap = el("div", {
     className: spec.missing ? "field field--missing" : "field",
     children: [
-      el("label", { attrs: { for: spec.id }, text: spec.label }),
+      fieldHead(spec),
       input,
-      el("p", { className: "hint", attrs: { id: `${spec.id}-hint` }, text: hintText }),
+      el("p", { className: "hint sr-only", attrs: { id: `${spec.id}-hint` }, text: hintText }),
     ],
   });
   return { wrap, input };
@@ -150,72 +162,98 @@ function renderForm(opts: BuildFormOptions): void {
   const formHeadingId = "ppc-form-h";
   const form = el("form", { attrs: { "aria-labelledby": formHeadingId } });
 
+  // Everything visible while typing lives in this scrolling region; the
+  // preview/note and the actions row are appended to `form` directly,
+  // below, outside it (see §2.1/§2.5 of the layout spec).
+  const fields = el("div", { className: "form__fields" });
+
   if (opts.leadLine) {
-    form.appendChild(el("p", { className: "form__lead", text: opts.leadLine }));
+    fields.appendChild(el("p", { className: "form__lead", text: opts.leadLine }));
   }
-  form.appendChild(el("h3", { className: "form__h", attrs: { id: formHeadingId }, text: opts.title }));
-  form.appendChild(el("p", { className: "form__sub", text: opts.sub }));
+  fields.appendChild(el("h3", { className: "form__h", attrs: { id: formHeadingId }, text: opts.title }));
+  // The lead line already carries the instruction the sub would otherwise
+  // repeat -- render at most one of them.
+  if (!opts.leadLine) {
+    fields.appendChild(el("p", { className: "form__sub", text: opts.sub }));
+  }
 
   const totalField = textField(opts.total, {
     type: "text",
     inputmode: "decimal",
     required: "",
   });
-  form.appendChild(totalField.wrap);
 
-  const grid = el("div", { className: "grid2" });
   const countField = textField(opts.count, {
     type: "number",
     min: String(INSTALLMENT_COUNT_MIN),
     max: String(INSTALLMENT_COUNT_MAX),
     required: "",
   });
-  grid.appendChild(countField.wrap);
 
   const cadenceSelect = el("select", {
     attrs: { id: "ppc-f-cadence", "aria-describedby": "ppc-f-cadence-hint", required: "" },
   });
   cadenceOptions(cadenceSelect, opts.cadenceInitial);
+  const cadenceSpec: FieldSpec = {
+    id: "ppc-f-cadence",
+    label: copy.FIELD_LABEL_CADENCE,
+    initial: opts.cadenceInitial,
+    missing: opts.cadenceMissing,
+  };
   const cadenceWrap = el("div", {
     className: opts.cadenceMissing ? "field field--missing" : "field",
     children: [
-      el("label", { attrs: { for: "ppc-f-cadence" }, text: copy.FIELD_LABEL_CADENCE }),
+      fieldHead(cadenceSpec),
       cadenceSelect,
       el("p", {
-        className: "hint",
+        className: "hint sr-only",
         attrs: { id: "ppc-f-cadence-hint" },
         text: opts.cadenceMissing ? copy.FIELD_HINT_MISSING : copy.FIELD_HINT_PARSED,
       }),
     ],
   });
-  grid.appendChild(cadenceWrap);
-  form.appendChild(grid);
 
   const eachField = textField(opts.each, {
     type: "text",
     inputmode: "decimal",
     required: "",
   });
-  form.appendChild(eachField.wrap);
+
+  // Rows regrouped for footprint only -- DOM/tab order is unchanged:
+  // total, count, cadence, each, first (§2.3 of the layout spec).
+  const gridA = el("div", { className: "grid2", children: [totalField.wrap, countField.wrap] });
+  const gridB = el("div", { className: "grid2", children: [cadenceWrap, eachField.wrap] });
+  fields.appendChild(gridA);
+  fields.appendChild(gridB);
 
   const firstInput = el("input", {
     attrs: { id: "ppc-f-first", type: "date", value: opts.firstDate, "aria-describedby": "ppc-f-first-hint", required: "" },
   });
-  form.appendChild(
+  const firstSpec: FieldSpec = {
+    id: "ppc-f-first",
+    label: copy.FIELD_LABEL_FIRST,
+    initial: opts.firstDate,
+    missing: false,
+  };
+  fields.appendChild(
     el("div", {
       className: "field",
       children: [
-        el("label", { attrs: { for: "ppc-f-first" }, text: copy.FIELD_LABEL_FIRST }),
+        fieldHead(firstSpec),
         firstInput,
         el("p", { className: "hint", attrs: { id: "ppc-f-first-hint" }, text: copy.FIELD_HINT_FIRST_PAYMENT }),
       ],
     }),);
 
+  form.appendChild(fields);
+
   // §5 R5 (first-run UX spec): the preview line and the arithmetic note
   // are siblings in ONE container, always in this order -- inserted or
   // removed only within it, so their combined appearance is one reflow
   // (never two) and the note can never render above the preview depending
-  // on which recompute ran last.
+  // on which recompute ran last. Moved out of the scroll region entirely
+  // (§2.5 of the layout spec): it is what you read before committing, so
+  // it sits directly above the row that commits.
   const derived = el("div", { className: "form__derived" });
   const echo = el("p", {
     className: "echo echo--empty",
@@ -227,9 +265,6 @@ function renderForm(opts: BuildFormOptions): void {
   let arithmeticNote: HTMLParagraphElement | null = null;
   let errorNote: HTMLParagraphElement | null = null;
 
-  // §5 R4 / X6: was an inline `style="margin-top:2px"` attribute; the
-  // layout value (plus the sticky-to-the-scroll-container behaviour) now
-  // lives entirely in OVERLAY_CSS's `.form__actions` rule.
   const actions = el("div", { className: "actions form__actions" });
   const submitBtn = el("button", { className: "btn btn--primary", attrs: { type: "submit" }, text: copy.FORM_SUBMIT });
   const cancelBtn = el("button", {

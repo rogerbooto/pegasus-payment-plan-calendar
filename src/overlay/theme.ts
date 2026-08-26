@@ -45,27 +45,14 @@ export const LIGHT_TOKENS = `
   --shadow: 0 10px 30px rgba(30,30,30,.10), 0 2px 6px rgba(30,30,30,.06);
   /*
    * Sizes, not colours -- no dark-mode variant, same reasoning as
-   * --panel-w below. These back the pinned form-actions row (.form__actions)
-   * and the scroll reservation that keeps it from covering the last field
-   * (.panel__body:has(form)): --form-actions-h is that reservation, built
-   * out of the SAME numbers the row and its buttons actually render with
-   * (rather than a hand-picked px figure that quietly stops matching once
-   * a button's own padding or min-height changes) plus a fixed safety
-   * margin absorbing the line-height/font-metric overshoot a 14px/700
-   * label at line-height 1.5 already produces past the declared 44px
-   * button min-height (measured ~45px here; font substitution on other
-   * platforms can push this further, hence the buffer rather than a
-   * tighter, more "precise" figure).
+   * --panel-w below. These back the form's own footer row (.form__actions),
+   * which is now a real panel footer outside the scroll region rather than
+   * a row layered over content -- see the frame rules below it.
    */
   --btn-min-h: 44px;
-  --form-actions-pad-top: 10px;
-  --form-actions-pad-bottom: 2px;
+  --form-actions-pad-top: 12px;      /* was 10px — this is a footer now, not a hairline strip */
+  --form-actions-pad-bottom: 12px;   /* was 2px  — likewise; 44 + 12 + 12 + 1 = 69px footer */
   --form-actions-border-w: 1px;
-  --form-actions-safety: 8px;
-  --form-actions-h: calc(
-    var(--btn-min-h) + var(--form-actions-pad-top) + var(--form-actions-pad-bottom) +
-    var(--form-actions-border-w) + var(--form-actions-safety)
-  );
 `;
 
 /**
@@ -84,13 +71,12 @@ export const LIGHT_TOKENS = `
  *               and re-declaring it here would just repeat the same value.
  *   --btn-ink   pairs with --gold (the primary button's own text colour);
  *               it inherits from light for the same reason --gold does.
- * The pinned form-actions row's sizing tokens (--btn-min-h,
- * --form-actions-pad-top, --form-actions-pad-bottom, --form-actions-border-w,
- * --form-actions-safety, --form-actions-h) are absent for the same reason
- * as --panel-w -- they are dimensions, not colours, and both colour
- * schemes share one geometry for the pinned row. (--border-strong, which
- * the row's top edge is drawn in, DOES vary by scheme and is already
- * declared above/below.)
+ * The form-actions footer's sizing tokens (--btn-min-h,
+ * --form-actions-pad-top, --form-actions-pad-bottom, --form-actions-border-w)
+ * are absent for the same reason as --panel-w -- they are dimensions, not
+ * colours, and both colour schemes share one geometry for the footer row.
+ * (--border-strong, which the row's top edge is drawn in, DOES vary by
+ * scheme and is already declared above/below.)
  */
 export const DARK_TOKENS = `
   --page-bg: #1a1a1a;
@@ -146,10 +132,6 @@ export const OVERLAY_CSS = `
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
-.sr-only {
-  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-}
 
 .panel {
   width: var(--panel-w);
@@ -161,6 +143,7 @@ export const OVERLAY_CSS = `
   border: 1px solid var(--border); border-radius: 16px;
   box-shadow: var(--shadow); overflow: hidden; text-align: left;
   line-height: 1.5;
+  container: ppcpanel / inline-size;
 }
 .panel__head {
   display: flex; align-items: center; gap: 10px; flex: none;
@@ -206,18 +189,56 @@ export const OVERLAY_CSS = `
 
 .panel__body { padding: 18px 16px 16px; overflow-y: auto; flex: 1 1 auto; }
 /*
- * §5 R4 continued, plus the founder-reported regression fixed here:
- * reserves room below the last field so the sticky .form__actions row
- * (bottom: 0 of this scroll container) can never sit on top of it once
- * scrolled all the way down. This used to be a bare 64px -- close to right
- * by coincidence, not derivation, so a later edit to the button's own
- * padding/min-height could silently widen the gap between the row's real
- * height and the space reserved for it, without any test noticing.
- * --form-actions-h (overlay/theme.ts LIGHT_TOKENS) is built from the same
- * custom properties .btn and .form__actions render with below, so the two
- * can no longer drift apart.
+ * Form screens only. The panel body stops being the scroll container and
+ * becomes a frame; the <form> owns the column and its own scroll region.
+ * The submit row therefore lives OUTSIDE the scrollport, so a field can
+ * never sit beneath it at any scroll offset -- which a sticky row inside
+ * the scrollport cannot promise, because shifting over the content it
+ * scrolls past is exactly what sticky positioning does.
  */
-.panel__body:has(form) { padding-bottom: var(--form-actions-h); }
+.panel__body:has(> form) {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  min-height: 0;
+}
+.panel__body > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+.form__fields {
+  flex: 1 1 auto;
+  min-height: 96px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+  padding: 16px 16px 10px;
+}
+/*
+ * The preview line and the arithmetic note: a fixed band at the decision
+ * point, immediately above the buttons. flex: 0 1 auto rather than
+ * 0 0 auto so that on a very short window this band, not the field
+ * region, is what gives up space -- .form__fields keeps a 96px floor so at
+ * least one whole field row is always usable.
+ */
+.form__derived {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+  padding: 0 16px;
+}
+/* The save-failure line, inserted between .form__derived and the buttons. */
+.panel__body > form > .note {
+  flex: 0 0 auto;
+  padding-inline: 16px;
+}
 .panel__foot {
   padding: 12px 16px 14px; border-top: 1px solid var(--border);
   font-size: 12px; line-height: 1.45; color: var(--text-3); flex: none;
@@ -250,31 +271,22 @@ export const OVERLAY_CSS = `
 
 .actions { display: flex; align-items: center; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
 /*
- * Section 5, rule R4 (first-run UX spec) -- the confirmation/manual-entry
- * form's own submit row (X6: was an inline style="margin-top:2px"
- * attribute, moved here). It sticks to the bottom of the scrolling
- * .panel__body so growth above it (the preview, the arithmetic note, a
- * save-failure line) can never push it below the fold or out from under a
- * pointer that is already reaching for it. An opaque panel-matching
- * background keeps scrolled-past content from showing through underneath.
- *
- * §5.4's own follow-up ("content scrolling behind a transparent row is
- * unreadable") undersold the actual founder-reported defect: an OPAQUE row
- * with no edge at all still reads as two things stacked on top of each
- * other, because nothing tells the eye it is a layered, pinned toolbar
- * rather than the next form field.
- * border-top makes that layering explicit in both colour schemes
- * (--border-strong, not --border, so it reads as a deliberate seam and not
- * one more inter-field hairline). It is styled with the same custom
- * properties .panel__body:has(form)'s reservation is built from, so a
- * change to the row's own padding/border thickness cannot silently drift
- * out of sync with the space reserved for it.
+ * The confirmation/manual-entry form's own submit row. It is now a real
+ * panel footer, outside the form's scroll region entirely (.form__fields
+ * above), rather than a row layered over content -- so a border-top here
+ * reads as an actual footer seam, not compensation for an overlap that
+ * would otherwise happen. margin-top: 0 beats .actions's margin-top: 18px
+ * (same specificity, later in the sheet), and padding-inline replaces the
+ * padding .panel__body no longer supplies on this surface.
  */
 .form__actions {
-  margin-top: 2px; position: sticky; bottom: 0; z-index: 1;
+  flex: 0 0 auto;
+  margin-top: 0;
   background: var(--panel-bg);
   border-top: var(--form-actions-border-w) solid var(--border-strong);
-  padding-top: var(--form-actions-pad-top); padding-bottom: var(--form-actions-pad-bottom);
+  padding-top: var(--form-actions-pad-top);
+  padding-bottom: var(--form-actions-pad-bottom);
+  padding-inline: 16px;
 }
 .btn {
   font: 700 14px inherit; border-radius: 100px; border: 1px solid transparent;
@@ -301,11 +313,10 @@ export const OVERLAY_CSS = `
 .day--pending { border: 1px dashed var(--control-line); }
 .callegend { margin-top: 11px; font-size: 11.5px; color: var(--text-3); line-height: 1.5; }
 
-.form__h { font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; font-size: 18px; font-weight: 600; letter-spacing: -.008em; }
-.form__sub { font-size: 13px; color: var(--text-2); margin-top: 5px; margin-bottom: 17px; }
-.form__lead { font-size: 13.5px; color: var(--text-2); margin-bottom: 15px; padding-left: 11px; border-left: 2px solid var(--border-strong); }
-.field { margin-bottom: 14px; }
-.field label { display: block; font-size: 12px; font-weight: 700; color: var(--text-2); margin-bottom: 5px; letter-spacing: .01em; }
+.field { margin-bottom: 12px; }
+.field__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.field label { display: block; font-size: 12px; font-weight: 700; color: var(--text-2); margin-bottom: 0; letter-spacing: .01em; }
+.field__flag { font-size: 11px; font-weight: 700; color: var(--text-2); letter-spacing: .02em; white-space: nowrap; }
 .field input, .field select {
   width: 100%; min-height: 44px; padding: 10px 12px;
   border: 1px solid var(--control-line); border-radius: 8px;
@@ -313,10 +324,17 @@ export const OVERLAY_CSS = `
   font: 600 15px inherit; font-variant-numeric: tabular-nums;
 }
 .field--missing input, .field--missing select { border-style: dashed; }
-.hint { font-size: 11.5px; color: var(--text-3); margin-top: 5px; line-height: 1.4; }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media (max-width: 420px) { .grid2 { grid-template-columns: 1fr; } }
-.echo { background: var(--panel-alt); border-radius: 8px; padding: 11px 13px; font-size: 13px; line-height: 1.45; margin: 4px 0 15px; color: var(--text); }
+.hint { font-size: 11.5px; color: var(--text-3); margin-top: 4px; line-height: 1.4; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.grid2 .field { margin-bottom: 0; }
+@container ppcpanel (max-width: 319px) { .grid2 { grid-template-columns: 1fr; } }
+
+.form__h { font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; font-size: 18px; font-weight: 600; letter-spacing: -.008em; line-height: 1.3; }
+.form__sub { font-size: 13px; color: var(--text-2); margin-top: 4px; margin-bottom: 14px; }
+.form__lead { font-size: 13.5px; color: var(--text-2); margin-bottom: 12px; padding-left: 11px; border-left: 2px solid var(--border-strong); }
+
+.echo { background: var(--panel-alt); border-radius: 8px; padding: 11px 13px; font-size: 13px; line-height: 1.45; margin: 10px 0 0; color: var(--text); }
 .echo .d { font-weight: 700; font-variant-numeric: tabular-nums; }
 /*
  * Section 5 / D6 (first-run UX spec) -- R1: while there is nothing to
@@ -328,11 +346,17 @@ export const OVERLAY_CSS = `
  * text nodes vary across engines).
  */
 .echo--empty { padding: 0; margin: 0; background: none; border: none; }
-.note { border-left: 2px solid var(--border-strong); padding-left: 11px; font-size: 12.5px; line-height: 1.5; color: var(--text-2); margin-bottom: 15px; }
+.note { border-left: 2px solid var(--border-strong); padding-left: 11px; font-size: 12.5px; line-height: 1.5; color: var(--text-2); margin: 10px 0 0; }
 .note b { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .status { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; font-size: 13.5px; color: var(--text); padding-bottom: 15px; margin-bottom: 3px; border-bottom: 1px solid var(--border); }
 .plain { font-size: 15px; line-height: 1.5; }
+
+/* utilities last, so they win over component margins. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
 
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0ms !important; animation-duration: 0ms !important; }
