@@ -15,6 +15,16 @@ export const GENERIC_CHECKOUT_PATH_PATTERNS: readonly string[] = [
   "/checkouts/",
   "/pay/",
   "/order/confirm",
+  // Amazon's checkout does not use the word "checkout" in its path at all, so
+  // without this the pre-gate went dormant there and the panel never appeared —
+  // not even the honest "we don't recognize this checkout" state. Staying quiet
+  // where we hold a host permission is worse than saying plainly that we cannot
+  // read the page: the user gets silence and no way to tell the difference
+  // between "nothing to show" and "broken". There is deliberately no Amazon
+  // adapter; the generic path caps at partial confidence by design, so the
+  // realistic outcome here is the honest state, which is the point.
+  "/gp/buy/",
+  "/gp/cart/desktop/go-to-checkout",
 ];
 
 /** EN/FR, CA+US geography (the design spec(i)). Exact (trimmed, case-insensitive) label match only. */
