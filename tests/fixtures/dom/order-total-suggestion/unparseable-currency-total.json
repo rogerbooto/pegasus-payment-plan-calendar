@@ -1,0 +1,4 @@
+{
+  "describes": "an exact-label match ('Total') whose value carries an unsupported currency symbol (EUR) -- reuses the frozen money parser's 'currency must parse' gate (src/parser/money.ts) rather than guessing a currency or the number alone.",
+  "expected": null
+}

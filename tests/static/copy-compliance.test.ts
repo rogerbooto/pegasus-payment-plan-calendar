@@ -274,6 +274,46 @@ async function collectAllRenderedCopy(): Promise<string[]> {
     collected.push(...(await collectFromOverlay({ kind: "DEGRADED", reason: "unconfirmed" }, store)));
   }
   {
+    // The order-total-suggestion manual-entry form: a DEGRADED page with a
+    // real, exactly-labelled order total in its light DOM, after clicking
+    // "Add a plan" -- exercises FORM_ORDER_TOTAL_ONLY_LEAD, the new lead
+    // line this feature adds, through the real click path rather than a
+    // copy of its string.
+    document.body.replaceChildren();
+    document.body.appendChild(
+      (() => {
+        const div = document.createElement("div");
+        const label = document.createElement("span");
+        label.textContent = "Order Total:";
+        const value = document.createElement("span");
+        value.textContent = "CAD 89.96";
+        div.append(label, value);
+        return div;
+      })(),);
+    const store = memoryStore();
+    const ledger = new PlanLedger(store);
+    const originalAttachShadow = Element.prototype.attachShadow;
+    const box: { root: ShadowRoot | null } = { root: null };
+    Element.prototype.attachShadow = function (init: ShadowRootInit): ShadowRoot {
+      const root = originalAttachShadow.call(this, init);
+      box.root = root;
+      return root;
+    };
+    const controller = createOverlayHost(document, { store, ledger, today: () => "2026-06-01" });
+    controller.mount({ kind: "DEGRADED", reason: "no_match" });
+    await flush();
+    Element.prototype.attachShadow = originalAttachShadow;
+    const captured = box.root;
+    if (!captured) throw new Error("fixture drift: attachShadow was never invoked for the order-total-suggestion controller");
+    const addBtn = [...captured.querySelectorAll("button")].find((b) => b.textContent === "Add a plan");
+    if (!addBtn) throw new Error('fixture drift: expected an "Add a plan" button on the DEGRADED panel');
+    (addBtn as HTMLButtonElement).click();
+    await flush();
+    collected.push(...collectUserFacingStrings(captured));
+    controller.unmount();
+    document.body.replaceChildren();
+  }
+  {
     const store = memoryStore();
     collected.push(...(await collectFromOverlay({
       kind: "PARTIAL",

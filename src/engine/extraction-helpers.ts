@@ -44,6 +44,25 @@ function findValueNearLabel(label: Element): Element[] {
 }
 
 /**
+ * THE ONE PERMITTED LOOSENING of the exact-label-match rule below (a
+ * Principles Guardian ruling, scoped to the order-total-suggestion
+ * feature): a label ending in a single trailing colon -- optionally
+ * preceded by one space, i.e. both the EN ("Order total:") and FR
+ * ("Total de la commande :") shapes merchants actually render -- is
+ * compared as if that colon (and the one space before it) were absent.
+ * This runs strictly AFTER normalizedTrim/toLowerCase and the result is
+ * still checked with a full, exact Set-membership test against the same
+ * closed lexicon below: it is not substring, prefix, startsWith, or fuzzy
+ * matching, and it strips nothing but this one trailing punctuation shape.
+ * Any further loosening of this rule requires a new ruling.
+ */
+const TRAILING_LABEL_COLON = /\s?:$/;
+
+function stripTrailingLabelColon(normalizedLowercaseLabel: string): string {
+  return normalizedLowercaseLabel.replace(TRAILING_LABEL_COLON, "");
+}
+
+/**
  * Locates a single-value anchor (order total or a bnpl-widget text marker):
  * the CSS selector list is tried first (a platform adapter's primary,
  * documented anchor). If CSS matches nothing at all, the label lexicon is
@@ -66,8 +85,12 @@ export function locateByCssOrLabel(
   if (!labelLexicon || labelLexicon.length === 0) return null;
 
   const lexicon = new Set(labelLexicon.map((t) => t.toLowerCase()));
-  const labelCandidates = [...page.querySelectorAll(LABEL_MATCH_ELEMENT_SELECTOR)].filter((el) =>
-    lexicon.has(normalizedTrim(el.textContent).toLowerCase()),);
+  const labelCandidates = [...page.querySelectorAll(LABEL_MATCH_ELEMENT_SELECTOR)].filter((el) => {
+    const labelText = normalizedTrim(el.textContent).toLowerCase();
+    // Exact match first; stripTrailingLabelColon (see above) is the one
+    // permitted loosening, applied only here in the label-match path.
+    return lexicon.has(labelText) || lexicon.has(stripTrailingLabelColon(labelText));
+  });
   const valueCandidates = labelCandidates.flatMap((label) => findValueNearLabel(label));
   if (valueCandidates.length === 0) return null;
   const selected = selectSingleCandidate(valueCandidates);

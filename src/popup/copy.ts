@@ -43,7 +43,7 @@ export const SETTINGS_GROUP_DATA = "Your data";
  */
 export const SETTINGS_CHECKOUT_READING_LABEL = "Read checkout pages";
 export const SETTINGS_CHECKOUT_READING_DESC =
-  "When this is on, checkout pages you visit are read for an installment-plan option — the same thing the first-run screen offered. Turning it off stops that right away, on any page already open. It does not remove any plans you've already saved.";
+  "When this is on, checkout pages you visit are read for an installment-plan option — the same thing the first-run screen offered. Even when no installment option is found, if a page looks like a checkout it may also read the order total shown there, to save you typing it in — that value is always shown to you first, to correct or erase before anything is saved. Turning this off stops all of that right away, on any page already open. It does not remove any plans you've already saved.";
 export const SETTINGS_DATA_NOTE = "You can delete everything stored here, any time, with the button below.";
 export const SETTINGS_DELETE_ALL = "Delete all my data";
 export const SETTINGS_GROUP_ABOUT = "About";
@@ -60,7 +60,7 @@ export const INVITE_NO_THANKS = "No thanks";
 export const ONBOARD_EYEBROW = "Before we start";
 export const ONBOARD_TITLE = "Payment Plan Calendar";
 export const ONBOARD_BODY =
-  "Until you turn this on, no checkout page is read. Once it's on, this looks at checkout pages you visit to spot an option to pay in installments. When it finds one, it reads four numbers — the order total, the number of payments, how often they're due, and the amount of each payment — and shows you those dates on a calendar next to plans you've already added. Everything stays on this device. Nothing is sent anywhere. You can turn it off again any time from Settings.";
+  "Until you turn this on, no checkout page is read. Once it's on, this looks at checkout pages you visit to spot an option to pay in installments. When it finds one, it reads four numbers — the order total, the number of payments, how often they're due, and the amount of each payment — and shows you those dates on a calendar next to plans you've already added. Even when no installment option is found, if a page looks like a checkout it may also read the order total shown there, to save you typing it in — that value is always shown to you first, to correct or erase before anything is saved. Everything stays on this device. Nothing is sent anywhere. You can turn it off again any time from Settings.";
 /**
  * The consent switch's own description line (first-run UX spec §1.5-1.6),
  * shown alongside SETTINGS_CHECKOUT_READING_LABEL on the FIRST-RUN screen

@@ -1,0 +1,4 @@
+{
+  "describes": "EN trailing-colon label ('Order total:') -- the one permitted loosening (extraction-helpers.ts) strips it before the exact Set-membership test.",
+  "expected": { "cents": 4210, "currency": "CAD" }
+}

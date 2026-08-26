@@ -1,0 +1,4 @@
+{
+  "describes": "FR trailing-space-colon label ('Total de la commande :') -- the one permitted loosening (extraction-helpers.ts) strips the space and colon before the exact Set-membership test against 'total de la commande'.",
+  "expected": { "cents": 1500, "currency": "CAD" }
+}

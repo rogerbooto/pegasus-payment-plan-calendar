@@ -32,6 +32,7 @@ import type {
   Currency,
   DegradeReason,
   IsoDate,
+  OrderTotalSuggestion,
   PartialCandidate,
   PaymentPlanRecord,
   ScheduleCandidate,
@@ -58,6 +59,16 @@ export interface ManualEntrySheetProps {
   readonly prefill?: PartialCandidate;
   /** Present when arriving from the honest degraded state. */
   readonly degradeReason?: DegradeReason;
+  /**
+   * A one-shot, order-total-ONLY read from a DEGRADED page (see
+   * src/shared/types.ts's OrderTotalSuggestion and
+   * src/engine/order-total-suggestion.ts). Ignored whenever `prefill` is
+   * also present -- the two are structurally mutually exclusive in
+   * practice (a PARTIAL candidate never coexists with a DEGRADED
+   * suggestion), and `prefill`, being the richer shape, takes precedence
+   * if a caller ever passes both.
+   */
+  readonly orderTotalSuggestion?: OrderTotalSuggestion;
   readonly onConfirm: (confirmed: PaymentPlanRecord) => void | Promise<void>;
   readonly onCancel: () => void;
 }
@@ -429,23 +440,31 @@ function buildManualPlanRecord(
 }
 
 export function renderManualEntrySheet(container: HTMLElement, props: ManualEntrySheetProps): void {
-  const { prefill } = props;
+  const { prefill, orderTotalSuggestion } = props;
   const today = todayIsoDate();
   const isPartial = Boolean(prefill);
+  // See ManualEntrySheetProps.orderTotalSuggestion: ignored whenever a
+  // richer PARTIAL prefill is also present.
+  const suggestedTotalCents = !isPartial ? orderTotalSuggestion?.cents : undefined;
 
-  const currency = prefill?.currency ?? "CAD";
+  const currency = prefill?.currency ?? orderTotalSuggestion?.currency ?? "CAD";
+  const totalCents = prefill?.orderTotalCents ?? suggestedTotalCents;
 
   renderForm({
     container,
-    leadLine: isPartial ? copy.FORM_PARTIAL_LEAD : null,
+    leadLine: isPartial
+      ? copy.FORM_PARTIAL_LEAD
+      : suggestedTotalCents !== undefined
+        ? copy.FORM_ORDER_TOTAL_ONLY_LEAD
+        : null,
     title: isPartial ? copy.FORM_TITLE : copy.FORM_TITLE_EMPTY,
     sub: isPartial ? copy.FORM_SUB : copy.FORM_SUB_EMPTY,
     currency,
     total: {
       id: "ppc-f-total",
       label: copy.FIELD_LABEL_TOTAL,
-      initial: prefill?.orderTotalCents !== undefined ? candidateFieldValue(prefill.orderTotalCents, currency) : "",
-      missing: prefill?.orderTotalCents === undefined,
+      initial: totalCents !== undefined ? candidateFieldValue(totalCents, currency) : "",
+      missing: totalCents === undefined,
       placeholder: "$0.00",
     },
     count: {

@@ -17,7 +17,7 @@
  * `host.shadowRoot` reads back `null` (closed mode), while this module
  * keeps the real ShadowRoot reference in its own closure for rendering.
  */
-import type { EngineState, IsoDate, PaymentPlanRecord } from "../shared/types";
+import type { EngineState, IsoDate, OrderTotalSuggestion, PaymentPlanRecord } from "../shared/types";
 import { formatCents } from "../shared/format";
 import { addCents, type Cents, ZERO_CENTS } from "../shared/money";
 import { OVERLAY_HOST_TAG } from "../shared/constants";
@@ -26,6 +26,9 @@ import { chromeLocalStore, type KeyValueStore } from "../storage/store";
 import { markViewedNext30 } from "../popup/usage-tracking";
 import { computeImpact, paymentDates, type ImpactView } from "../impact/engine";
 import { confirmPlan, type ConfirmedPlanInput } from "../parser/confirmation";
+import { createDomPageProbe } from "../engine/dom-page-probe";
+import { extractionCore } from "../engine/extraction-core";
+import { readOrderTotalSuggestion } from "../engine/order-total-suggestion";
 import { renderConfirmationSheet, renderManualEntrySheet } from "./ConfirmationSheet";
 import { el, clear, text, styleTag } from "./dom";
 import { OVERLAY_CSS } from "./theme";
@@ -208,6 +211,11 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
   let screen: Screen = { kind: "impact" };
   let previousScreen: Screen | null = null;
   let currentState: EngineState | null = null;
+  // undefined = not yet attempted for the current mounted state; null =
+  // attempted once and came back blank. Read exactly once per mount()
+  // (never re-read on a later "Add a plan" click for the same state) --
+  // see readOrderTotalSuggestionOnce below.
+  let orderTotalSuggestion: OrderTotalSuggestion | null | undefined;
 
   function ensureHost(): ShadowRoot {
     if (host && shadow) return shadow;
@@ -245,8 +253,24 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
     render();
   }
 
+  /**
+   * The ONE-SHOT read (src/engine/order-total-suggestion.ts): performed at
+   * most once per mounted DEGRADED state, and only from this user action
+   * (never from mount() itself, and never on a mutation tick) -- see the
+   * Principles Guardian ruling on the order-total-suggestion feature.
+   * Attaches no observer; `doc` is read via the same PageProbe seam every
+   * other extraction path uses (src/engine/dom-page-probe.ts).
+   */
+  function readOrderTotalSuggestionOnce(): void {
+    if (orderTotalSuggestion !== undefined) return; // already attempted for this mounted state
+    if (currentState?.kind !== "DEGRADED") return;
+    const page = createDomPageProbe(doc);
+    orderTotalSuggestion = readOrderTotalSuggestion(page, extractionCore);
+  }
+
   function openManual(): void {
     previousScreen = screen;
+    readOrderTotalSuggestionOnce();
     screen = { kind: "manual" };
     render();
   }
@@ -504,7 +528,13 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
         onCancel: () => cancelForm(),
       });
     } else {
+      // Only DEGRADED reaches this branch (see mount()/openManual() above):
+      // orderTotalSuggestion is undefined until openManual() has attempted
+      // its one-shot read at least once, at which point it is either a
+      // real suggestion or null (attempted, blank) -- either way, exactly
+      // what renderManualEntrySheet expects.
       renderManualEntrySheet(body, {
+        orderTotalSuggestion: orderTotalSuggestion ?? undefined,
         onConfirm: (record) => handleConfirm(record),
         onCancel: () => cancelForm(),
       });
@@ -704,6 +734,11 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
   function mount(state: EngineState): void {
     if (dismissed) return;
     currentState = state;
+    // A fresh terminal state (a new tick, or a genuinely new session) means
+    // any earlier one-shot read no longer describes "this" state -- reset
+    // so the next "Add a plan" click, if any, reads again rather than
+    // reusing a suggestion read from a prior DOM snapshot.
+    orderTotalSuggestion = undefined;
     previousScreen = null;
     tab = "plan";
     screen =

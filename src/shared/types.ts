@@ -82,6 +82,26 @@ export type EngineState =
     }
   | { readonly kind: "DEGRADED"; readonly reason: DegradeReason };
 
+/**
+ * A single order-total-only suggestion, read once from a page the engine
+ * reached a terminal DEGRADED state on (it could not confirm the page is a
+ * checkout at all). Structurally distinct from PartialCandidate: it carries
+ * no ConfidenceReport, no missing-scalar list, and cannot be widened into
+ * one by assignment. It exists to prefill exactly one field
+ * (FIELD_LABEL_TOTAL, on the manual "Add a plan" form) as a correctable
+ * suggestion -- nothing else reads it, and it is never itself stored.
+ *
+ * Count, cadence and per-payment amount have no honest source on a
+ * DEGRADED page: only an installment-phrase cluster can supply them, and
+ * finding one routes away from DEGRADED entirely (src/engine/engine.ts's
+ * fallback rule / detectInstallmentOffer). This type is structurally
+ * incapable of carrying them for that reason, not by omission.
+ */
+export interface OrderTotalSuggestion {
+  readonly cents: Cents;
+  readonly currency: Currency;
+}
+
 /** How a stored plan came to exist. */
 export type PlanSource = "manual" | "checkout_confirmed";
 

@@ -1,0 +1,4 @@
+{
+  "describes": "two visible, exactly-labelled 'Order Total:' rows with different values -- selectSingleCandidate's disagreement rule (extraction-helpers.ts/candidates.ts) refuses rather than picks either.",
+  "expected": null
+}

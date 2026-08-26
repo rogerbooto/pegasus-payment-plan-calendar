@@ -1,0 +1,4 @@
+{
+  "describes": "the founder's motivating www.amazon.ca checkout: a summary block with Items/Shipping/Estimated-fee/Estimated-tax rows plus a trailing-colon 'Order Total:' row. None of the tax/shipping/fee labels are in GENERIC_ORDER_TOTAL_LABEL_LEXICON, so only the exact 'order total' (post colon-strip) label can match.",
+  "expected": { "cents": 8996, "currency": "CAD" }
+}

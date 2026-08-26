@@ -1,0 +1,4 @@
+{
+  "describes": "a non-checkout page under a loose path pattern (e.g. /gp/... order history): each past order carries its own exactly-labelled 'Order total:' row, but two different orders' totals is disagreement, never a single plausible-but-wrong pick -- so this is the 'blank' half of C8(c) ('blank, or correct -- never a plausible-wrong value'). A single-order history page hits the same code path as the amazon-order-summary fixture and would correctly return that one order's own total.",
+  "expected": null
+}

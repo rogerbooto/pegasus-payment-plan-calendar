@@ -20,6 +20,18 @@ export const FORM_SUB = "Change anything that doesn't match, then add it.";
 export const FORM_TITLE_EMPTY = "Add a plan";
 export const FORM_SUB_EMPTY = "Fill in what the checkout is offering you.";
 export const FORM_PARTIAL_LEAD = "We read part of this plan. Fill in the rest and check what's here.";
+/**
+ * Shown on the manual "Add a plan" form only when the page reached a
+ * DEGRADED state (the engine could not confirm it as a checkout at all)
+ * AND a single order-total suggestion was still read from it
+ * (src/engine/order-total-suggestion.ts). Deliberately distinct from
+ * FORM_PARTIAL_LEAD: "We read part of this plan" would be false here --
+ * no plan, partial or otherwise, was ever detected, only one labelled
+ * number on the page. This line makes exactly two claims: an order total
+ * was read, and no installment plan was found — both true at once.
+ */
+export const FORM_ORDER_TOTAL_ONLY_LEAD =
+  "We read the order total shown on this page. We didn't find an installment plan here — fill in the rest.";
 export const FIELD_HINT_PARSED = "Read from this page — change it if it's wrong.";
 export const FIELD_HINT_MISSING = "Not found on this page.";
 export const FIELD_HINT_FIRST_PAYMENT = "Today, unless the plan starts later.";
