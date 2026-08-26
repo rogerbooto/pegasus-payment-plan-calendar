@@ -11,7 +11,10 @@
  */
 import { createPopupApp } from "./PopupApp";
 import { styleTag } from "../overlay/dom";
+import { applyThemeAttribute, resolvePersistedTheme } from "../overlay/theme";
 import { POPUP_CSS } from "./theme";
+import { PlanLedger } from "../storage/ledger";
+import { chromeLocalStore } from "../storage/store";
 
 function isExtensionPageContext(): boolean {
   return typeof document !== "undefined" && typeof window !== "undefined";
@@ -19,8 +22,19 @@ function isExtensionPageContext(): boolean {
 
 if (isExtensionPageContext() && typeof document !== "undefined") {
   document.addEventListener("DOMContentLoaded", () => {
-    document.head.appendChild(styleTag(POPUP_CSS));
-    const root = document.getElementById("ppc-popup-root");
-    if (root) void createPopupApp(root).init();
+    void (async () => {
+      const store = chromeLocalStore;
+      const ledger = new PlanLedger(store);
+      // §4.6 (first-run UX spec) -- resolved and applied BEFORE the
+      // stylesheet is attached and before the first render, so an
+      // explicit override never flashes the wrong scheme. Passing the
+      // same store/ledger into createPopupApp below means this is the
+      // only settings read on the happy path, not a second one.
+      const theme = await resolvePersistedTheme(ledger);
+      applyThemeAttribute(document.documentElement, theme);
+      document.head.appendChild(styleTag(POPUP_CSS));
+      const root = document.getElementById("ppc-popup-root");
+      if (root) void createPopupApp(root, { store, ledger }).init();
+    })();
   });
 }

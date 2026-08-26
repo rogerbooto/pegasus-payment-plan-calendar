@@ -31,7 +31,7 @@ import { extractionCore } from "../engine/extraction-core";
 import { readOrderTotalSuggestion } from "../engine/order-total-suggestion";
 import { renderConfirmationSheet, renderManualEntrySheet } from "./ConfirmationSheet";
 import { el, clear, text, styleTag } from "./dom";
-import { OVERLAY_CSS } from "./theme";
+import { applyThemeAttribute, OVERLAY_CSS, resolvePersistedTheme } from "./theme";
 import { formatMonthDay, formatWeekday, todayIsoDate } from "./format-helpers";
 import * as copy from "./copy";
 
@@ -226,6 +226,18 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
     const view = doc.defaultView;
     collapsed = Boolean(view && view.innerWidth < COLLAPSE_BREAKPOINT_PX);
     doc.body.appendChild(host);
+    // §4.6 (first-run UX spec) -- the manual appearance override applies
+    // to this panel too: it floats over a merchant's own page, and a
+    // checkout panel that ignored an override the toolbar popup honoured
+    // would be an inconsistency with no way to explain it to the user.
+    // `mountedHost` is captured so a read that is still in flight when the
+    // panel is dismissed (dismiss() -> host = null) cannot apply a stale
+    // attribute to a host that is no longer live, or to whatever host a
+    // later mount() creates.
+    const mountedHost = host;
+    void resolvePersistedTheme(ledger).then((theme) => {
+      if (host === mountedHost) applyThemeAttribute(mountedHost, theme);
+    });
     return shadow;
   }
 

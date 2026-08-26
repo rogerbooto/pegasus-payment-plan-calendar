@@ -14,7 +14,17 @@
  * `:host` matches nothing at all. Re-declaring on `:root` from these same
  * constants, rather than writing a second copy of the hex values there,
  * keeps the two surfaces from ever drifting apart.
+ *
+ * `applyThemeAttribute`/`resolvePersistedTheme` (bottom of file) are the
+ * one DOM-touching exception to this file otherwise being pure CSS text --
+ * they exist here, next to the tokens and selectors they drive, so the
+ * `data-theme` mechanism has exactly one place to hold the line rather
+ * than being reimplemented at each of its three call sites (popup.ts,
+ * welcome.ts, OverlayHost.ts).
  */
+import type { PlanLedger } from "../storage/ledger";
+import { DEFAULT_THEME } from "../storage/ledger";
+import type { Theme } from "../shared/types";
 
 export const LIGHT_TOKENS = `
   --panel-w: 380px;
@@ -108,10 +118,25 @@ export const OVERLAY_CSS = `
   top: 20px;
   right: 20px;
 }
+/*
+ * The manual appearance override (first-run UX spec §4): "system" (the
+ * default, no attribute) keeps this exact media-query behaviour --
+ * ":not([data-theme='light'])" only excludes an explicit LIGHT choice
+ * from the dark-on-dark-OS rule below, it does not require the attribute
+ * to be present. "dark" pins the dark tokens even on a light OS via the
+ * unconditional selector beneath the media block. Both apply to the
+ * overlay host too (createOverlayHost sets the same data-theme attribute
+ * at mount time, from the same persisted setting) -- a checkout-page
+ * panel that ignored the override while the toolbar popup honoured it
+ * would be an inconsistency a user has no way to explain.
+ */
 @media (prefers-color-scheme: dark) {
-  :host {
+  :host(:not([data-theme="light"])) {
     ${DARK_TOKENS}
   }
+}
+:host([data-theme="dark"]) {
+  ${DARK_TOKENS}
 }
 @media (max-width: 767px) {
   :host { --panel-w: 360px; top: 12px; right: 12px; left: 12px; width: auto; }
@@ -318,3 +343,40 @@ export const OVERLAY_CSS = `
   .panel { animation: none; opacity: 1; }
 }
 `;
+
+/**
+ * Applies (or clears) the `data-theme` attribute the selectors above key
+ * off of. "system" removes the attribute rather than writing the literal
+ * (first-run UX spec §4.6: "keep the DOM honest about which mode is a
+ * preference") -- that is also what hands control back to the media query
+ * genuinely, rather than freezing whatever "system" last resolved to: with
+ * no attribute present, `:host(:not([data-theme="light"]))` /
+ * `:root:not([data-theme="light"])` match again and the plain
+ * `@media (prefers-color-scheme: dark)` behaviour is exactly what runs.
+ */
+export function applyThemeAttribute(target: Element, theme: Theme): void {
+  if (theme === "system") {
+    target.removeAttribute("data-theme");
+  } else {
+    target.setAttribute("data-theme", theme);
+  }
+}
+
+/**
+ * Resolves the persisted appearance override for a bootstrap script
+ * (src/popup/popup.ts, src/welcome/welcome.ts) to apply BEFORE the first
+ * paint, and for the overlay host to apply at mount time
+ * (src/overlay/OverlayHost.ts) -- first-run UX spec §4.6's "on any read
+ * failure or absence, fall back to 'system' -- never a hardcoded scheme".
+ * A never-onboarded install (readSettings() returning null) and an actual
+ * storage read failure both resolve the same safe way; neither blocks the
+ * caller from rendering.
+ */
+export async function resolvePersistedTheme(ledger: PlanLedger): Promise<Theme> {
+  try {
+    const settings = await ledger.readSettings();
+    return settings?.theme ?? DEFAULT_THEME;
+  } catch {
+    return DEFAULT_THEME;
+  }
+}

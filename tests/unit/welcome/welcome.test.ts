@@ -80,7 +80,7 @@ describe("welcome entry point — mounts the real onboarding screen, with the pi
   // screen this tab eventually reaches (not just the pin hint above).
   it("wires createPopupApp with surface: tab, so its own hero screen (once reached) shows the tab-only exit block", async () => {
     const ledger = new PlanLedger(chromeLocalStore);
-    await ledger.writeSettings({ checkoutReadingEnabled: false });
+    await ledger.writeSettings({ checkoutReadingEnabled: false, theme: "system" });
 
     vi.resetModules();
     await import("../../../src/welcome/welcome");
@@ -108,7 +108,7 @@ describe("welcome entry point — mounts the real onboarding screen, with the pi
     // Settings must already exist for init() to land on "hero" rather
     // than "onboard" -- readSettings() returning null is exactly what
     // sends a fresh install to the onboarding screen instead.
-    await ledger.writeSettings({ checkoutReadingEnabled: false });
+    await ledger.writeSettings({ checkoutReadingEnabled: false, theme: "system" });
     await ledger.addPlan({
       id: "22222222-2222-4222-8222-222222222222",
       createdAt: "2026-06-01",

@@ -26,10 +26,21 @@ ${OVERLAY_CSS}
 :root {
   ${LIGHT_TOKENS}
 }
+/*
+ * The manual appearance override (first-run UX spec §4.6) -- the same
+ * :not([data-theme="light"]) scoping OVERLAY_CSS's own :host block uses,
+ * re-declared on :root because :host matches nothing in this normal
+ * document (see the file-header comment above). "system" (no attribute)
+ * keeps this exact media-query behaviour; an explicit "light"/"dark"
+ * choice overrides it either way.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     ${DARK_TOKENS}
   }
+}
+:root[data-theme="dark"] {
+  ${DARK_TOKENS}
 }
 
 html, body {
@@ -80,6 +91,31 @@ html, body {
 .settings__group:first-child { margin-top: 0; }
 .settings__h { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 8px; }
 .settings__note { font-size: 11.5px; color: var(--text-3); margin-top: 8px; line-height: 1.4; }
+/*
+ * §4.7 (first-run UX spec) -- the appearance override is a <fieldset>/
+ * <legend> pair rather than another <div>/.settings__h, so its three
+ * options get native grouped announcement and arrow-key roving for free
+ * (§4.8). A bare <fieldset> carries its own browser default border,
+ * padding and margin that none of the other settings groups have; this
+ * resets those specifically (a higher-specificity element+class selector,
+ * so it wins over the plain .settings__group rule above without
+ * duplicating its margin-top) so a fieldset-based group still reads as
+ * "one more group on this screen", not a visually distinct box.
+ */
+fieldset.settings__group { border: 0; padding: 0; margin: 18px 0 0; min-width: 0; }
+fieldset.settings__group:first-child { margin-top: 0; }
+legend.settings__h { padding: 0; }
+/*
+ * Three stacked rows, never a 3-segment control (§4.9 -- a segmented
+ * control at 340px would put each label under ~100px and risks
+ * truncation). The <label> is the sibling anatomy §4.7 specifies (not a
+ * wrapping element), stretched to fill the row's own height/width so most
+ * of the row -- not just the small circle -- is a real click/tap target,
+ * on top of (never instead of) the row's own 44px minimum height.
+ */
+.radiorow { display: flex; align-items: stretch; gap: 10px; min-height: 44px; }
+.radiorow input[type="radio"] { flex: 0 0 auto; width: 18px; height: 18px; margin-top: auto; margin-bottom: auto; accent-color: var(--gold); cursor: pointer; }
+.radiorow label { flex: 1; display: flex; align-items: center; font-size: 13.5px; color: var(--text); cursor: pointer; }
 .sitelist { list-style: none; margin-top: 4px; }
 .sitelist li { display: flex; align-items: center; justify-content: space-between; padding: 9px 0 9px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
 .site { color: var(--text-2); }

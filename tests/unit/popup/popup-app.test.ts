@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPopupApp } from "../../../src/popup/PopupApp";
 import { PlanLedger } from "../../../src/storage/ledger";
 import { createFakeStore } from "../overlay/test-helpers";
@@ -351,6 +351,156 @@ describe("PopupApp — the Settings consent toggle actually flips the stored val
     const stored = await store.get(["plans", "settings"]);
     expect((stored.plans as unknown[]).length).toBe(1);
     expect((stored.settings as { checkoutReadingEnabled: boolean }).checkoutReadingEnabled).toBe(false);
+  });
+});
+
+// §4 (first-run UX spec) -- the manual appearance override, Settings only.
+describe("PopupApp — appearance override (§4)", () => {
+  function openSettings(el: HTMLElement): void {
+    (el.querySelector('[aria-label="Settings"]') as HTMLButtonElement).click();
+  }
+
+  function radios(el: HTMLElement): HTMLInputElement[] {
+    return [...el.querySelectorAll('[data-theme-choice] input[type="radio"]')] as HTMLInputElement[];
+  }
+
+  function checkedValue(el: HTMLElement): string | undefined {
+    return radios(el).find((r) => r.checked)?.value;
+  }
+
+  afterEach(() => {
+    document.documentElement.removeAttribute("data-theme");
+  });
+
+  it("renders exactly three radio options -- Follow system, Light, Dark -- inside a single data-theme-choice group", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false, theme: "system" } });
+    const el = root();
+    await createPopupApp(el, { store }).init();
+    openSettings(el);
+    await flush();
+
+    const group = radios(el);
+    expect(group).toHaveLength(3);
+    expect(group.map((r) => r.value).sort()).toEqual(["dark", "light", "system"]);
+    expect(el.textContent).toContain("Appearance");
+    expect(el.textContent).toContain("Follow system");
+    expect(el.textContent).toContain("Light");
+    expect(el.textContent).toContain("Dark");
+  });
+
+  it("pre-checks the persisted value", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false, theme: "dark" } });
+    const el = root();
+    await createPopupApp(el, { store }).init();
+    openSettings(el);
+    await flush();
+
+    expect(checkedValue(el)).toBe("dark");
+  });
+
+  // The migration case surfacing in the UI: a store predating `theme`
+  // entirely (PlanLedger.readSettings()'s own migration, exercised here
+  // through the real screen rather than only at the storage layer).
+  it("an install with no theme field at all shows 'Follow system' checked, not an arbitrary light/dark", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: true } });
+    const el = root();
+    await createPopupApp(el, { store }).init();
+    openSettings(el);
+    await flush();
+
+    expect(checkedValue(el)).toBe("system");
+  });
+
+  it("selecting Dark writes theme: 'dark' through the ledger and sets data-theme=\"dark\" on the document element", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false, theme: "system" } });
+    const el = root();
+    await createPopupApp(el, { store }).init();
+    openSettings(el);
+    await flush();
+
+    const dark = radios(el).find((r) => r.value === "dark") as HTMLInputElement;
+    dark.checked = true;
+    dark.dispatchEvent(new Event("change", { bubbles: true }));
+    await flush();
+
+    const settings = await store.get(["settings"]);
+    expect((settings.settings as { theme: string }).theme).toBe("dark");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+  });
+
+  // The mechanism regression guard: "system" must REMOVE the attribute
+  // entirely (not write the literal "system"), which is what hands control
+  // back to the `prefers-color-scheme` media query genuinely rather than
+  // freezing whatever it last resolved to (§4.6).
+  it("selecting Follow system after Dark removes the data-theme attribute entirely", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false, theme: "dark" } });
+    document.documentElement.setAttribute("data-theme", "dark");
+    const el = root();
+    await createPopupApp(el, { store }).init();
+    openSettings(el);
+    await flush();
+
+    const system = radios(el).find((r) => r.value === "system") as HTMLInputElement;
+    system.checked = true;
+    system.dispatchEvent(new Event("change", { bubbles: true }));
+    await flush();
+
+    expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
+    const settings = await store.get(["settings"]);
+    expect((settings.settings as { theme: string }).theme).toBe("system");
+  });
+
+  it("selecting a theme does not disturb the already-stored checkoutReadingEnabled value (the partial-write guard, §4.5 step 5)", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: true, theme: "system" } });
+    const el = root();
+    await createPopupApp(el, { store }).init();
+    openSettings(el);
+    await flush();
+
+    const light = radios(el).find((r) => r.value === "light") as HTMLInputElement;
+    light.checked = true;
+    light.dispatchEvent(new Event("change", { bubbles: true }));
+    await flush();
+
+    const settings = await store.get(["settings"]);
+    expect(settings.settings).toEqual({ checkoutReadingEnabled: true, theme: "light" });
+  });
+
+  it("a rejected write reverts the selection and renders SETTINGS_TOGGLE_FAILED with role=alert", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false, theme: "light" } });
+    const ledger = new PlanLedger(store);
+    vi.spyOn(ledger, "writeSettings").mockRejectedValueOnce(new Error("storage full"));
+    const el = root();
+    await createPopupApp(el, { store, ledger }).init();
+    openSettings(el);
+    await flush();
+
+    const dark = radios(el).find((r) => r.value === "dark") as HTMLInputElement;
+    dark.checked = true;
+    dark.dispatchEvent(new Event("change", { bubbles: true }));
+    await flush();
+
+    expect(checkedValue(el)).toBe("light");
+    const alert = el.querySelector('[data-theme-choice] ~ [role="alert"], [role="alert"]');
+    expect(alert?.textContent).toBe("That didn't save. Your browser storage may be full. Try again.");
+  });
+
+  it("a fresh createPopupApp(...).init() against the same store shows the persisted choice (round-trip)", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false, theme: "system" } });
+    const el = root();
+    await createPopupApp(el, { store }).init();
+    openSettings(el);
+    await flush();
+    const light = radios(el).find((r) => r.value === "light") as HTMLInputElement;
+    light.checked = true;
+    light.dispatchEvent(new Event("change", { bubbles: true }));
+    await flush();
+
+    const el2 = root();
+    await createPopupApp(el2, { store }).init();
+    openSettings(el2);
+    await flush();
+    expect(checkedValue(el2)).toBe("light");
   });
 });
 

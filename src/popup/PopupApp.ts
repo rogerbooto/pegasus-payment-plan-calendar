@@ -28,13 +28,15 @@
 import type { PaymentPlanRecord } from "../shared/types";
 import { formatCents } from "../shared/format";
 import { addCents, type Cents, ZERO_CENTS } from "../shared/money";
-import { PlanLedger, STORAGE_KEY_ALLOWLIST } from "../storage/ledger";
+import { DEFAULT_THEME, PlanLedger, STORAGE_KEY_ALLOWLIST } from "../storage/ledger";
 import { chromeLocalStore, type KeyValueStore } from "../storage/store";
 import { paymentDates } from "../impact/engine";
 import { renderManualEntrySheet } from "../overlay/ConfirmationSheet";
 import { renderToolbarVerification } from "../overlay/ToolbarVerification";
 import { buildConsentSwitchRow } from "./ConsentSwitch";
+import { buildThemeChoiceGroup } from "./ThemeChoice";
 import { el, clear, text } from "../overlay/dom";
+import { applyThemeAttribute } from "../overlay/theme";
 import { todayIsoDate } from "../overlay/format-helpers";
 import * as overlayCopy from "../overlay/copy";
 import * as copy from "./copy";
@@ -405,7 +407,7 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
         if (pending) return;
         pending = true;
         void ledger
-          .writeSettings({ checkoutReadingEnabled: next })
+          .updateSettings({ checkoutReadingEnabled: next })
           .then(() => {
             pending = false;
             clear(errorSlot);
@@ -442,6 +444,50 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
         ],
       }),);
     body.appendChild(dataGroup);
+
+    // §4 (first-run UX spec) -- the manual appearance override. Below
+    // "Your data" and above "About" (§4.4/§4.7), so the checkout-reading
+    // consent control keeps the top of the screen. Pessimistic, same
+    // shape as the consent switch above it: the write happens first, the
+    // radio only reflects the new value once it resolves, and a rejected
+    // write reverts the selection and shows the same SETTINGS_TOGGLE_FAILED
+    // line rather than ever displaying an override that isn't actually
+    // stored.
+    const currentTheme = settings?.theme ?? DEFAULT_THEME;
+    let pendingTheme = false;
+    let lastAppliedTheme = currentTheme;
+    const themeErrorSlot = el("div", {});
+    const themeHandle = buildThemeChoiceGroup({
+      idPrefix: "ppc-settings-theme",
+      current: currentTheme,
+      onSelect: (next) => {
+        if (pendingTheme) return;
+        pendingTheme = true;
+        const previous = lastAppliedTheme;
+        void ledger
+          .updateSettings({ theme: next })
+          .then(() => {
+            pendingTheme = false;
+            lastAppliedTheme = next;
+            clear(themeErrorSlot);
+            // Flips the data-theme attribute the stylesheet's selectors
+            // key off of (overlay/theme.ts) -- the browser recomputes the
+            // matching CSS the moment the attribute changes, so no
+            // further render/reload is needed for the visual change
+            // itself (X5 -- no transition is applied to it either).
+            if (typeof document !== "undefined") applyThemeAttribute(document.documentElement, next);
+          })
+          .catch(() => {
+            pendingTheme = false;
+            clear(themeErrorSlot);
+            themeErrorSlot.appendChild(
+              el("p", { className: "note", attrs: { role: "alert" }, text: copy.SETTINGS_TOGGLE_FAILED }),);
+            themeHandle.setValue(previous);
+          });
+      },
+    });
+    body.appendChild(themeHandle.fieldset);
+    body.appendChild(themeErrorSlot);
 
     const aboutGroup = el("div", {
       className: "settings__group",
@@ -522,12 +568,18 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
             text: copy.ONBOARD_CONTINUE,
             on: {
               click: () => {
-                // Continue performs the single writeSettings call (§1.4).
+                // Continue performs the single settings write (§1.4).
                 // Continue-without-touching-the-switch persists `false` --
                 // the same safe, not-reading default the switch itself
                 // was already showing, never an implicit "yes".
+                // updateSettings (not writeSettings) because this is a
+                // partial patch: a never-onboarded install has no `theme`
+                // yet either, and writeSettings alone would now throw
+                // "missing required field \"theme\"" (§4.5 step 5) --
+                // updateSettings supplies DEFAULT_THEME for that untouched
+                // field the same way it preserves an already-chosen one.
                 const checkoutReadingEnabled = localChecked;
-                void ledger.writeSettings({ checkoutReadingEnabled }).then(() => go("hero"));
+                void ledger.updateSettings({ checkoutReadingEnabled }).then(() => go("hero"));
               },
             },
           }),

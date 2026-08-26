@@ -46,6 +46,22 @@ export const SETTINGS_CHECKOUT_READING_DESC =
   "When this is on, checkout pages you visit are read for an installment-plan option — the same thing the first-run screen offered. Even when no installment option is found, if a page looks like a checkout it may also read the order total shown there, to save you typing it in — that value is always shown to you first, to correct or erase before anything is saved. Turning this off stops all of that right away, on any page already open. It does not remove any plans you've already saved.";
 export const SETTINGS_DATA_NOTE = "You can delete everything stored here, any time, with the button below.";
 export const SETTINGS_DELETE_ALL = "Delete all my data";
+/**
+ * The manual light/dark override (first-run UX spec §4): Settings only,
+ * never the first-run screen -- that screen carries exactly one
+ * consequential decision, and a trivially reversible, zero-consequence
+ * appearance control placed beside it would teach users that controls
+ * there are low-stakes. Three states, never two: "system" (the default)
+ * genuinely follows the OS, and a two-position control would have no
+ * position that means that, so the first interaction would silently and
+ * permanently destroy it. Rendered as a group below "Your data" so the
+ * checkout-reading control keeps the top of the screen.
+ */
+export const SETTINGS_GROUP_APPEARANCE = "Appearance";
+export const SETTINGS_THEME_SYSTEM = "Follow system";
+export const SETTINGS_THEME_LIGHT = "Light";
+export const SETTINGS_THEME_DARK = "Dark";
+
 export const SETTINGS_GROUP_ABOUT = "About";
 export const SETTINGS_HOW_GENUINE = "How to know it's genuine";
 

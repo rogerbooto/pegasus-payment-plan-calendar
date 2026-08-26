@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_THEME,
   FORBIDDEN_KEY_SUBSTRINGS,
   PlanLedger,
+  SETTINGS_FIELD_ALLOWLIST,
   STORAGE_KEY_ALLOWLIST,
+  THEME_VALUES,
   validatePlanRecord,
   validateSettings,
   validateUsageFlags,
@@ -88,13 +91,24 @@ describe("plan record allowlist", () => {
 });
 
 describe("settings allowlist", () => {
+  // §4.5 (first-run UX spec): the allowlist grew from one field to two.
+  // Direct assertion on the exported array, mirroring how
+  // STORAGE_KEY_ALLOWLIST is asserted on below -- proof this is a
+  // deliberate, reviewed shape, not just inferable from validateSettings'
+  // behaviour.
+  it("SETTINGS_FIELD_ALLOWLIST is exactly checkoutReadingEnabled and theme", () => {
+    expect(SETTINGS_FIELD_ALLOWLIST).toEqual(["checkoutReadingEnabled", "theme"]);
+  });
+
   it("accepts the closed settings record", () => {
-    const settings = validateSettings({ checkoutReadingEnabled: true });
+    const settings = validateSettings({ checkoutReadingEnabled: true, theme: "system" });
     expect(settings.checkoutReadingEnabled).toBe(true);
+    expect(settings.theme).toBe("system");
   });
 
   it("rejects unknown settings keys", () => {
-    expect(() => validateSettings({ checkoutReadingEnabled: false, extra: 1 })).toThrow(StorageSchemaError);
+    expect(() => validateSettings({ checkoutReadingEnabled: false, theme: "system", extra: 1 })).toThrow(
+      StorageSchemaError,);
   });
 
   // measurementEnabled was REMOVED from the schema (guardian review,
@@ -116,10 +130,56 @@ describe("settings allowlist", () => {
   // and flips -- RED if it is ever removed from the allowlist/validator,
   // or if it stops being required.
   it("admits checkoutReadingEnabled -- true and false are both valid, and it is required (missing => rejected)", () => {
-    expect(validateSettings({ checkoutReadingEnabled: true }).checkoutReadingEnabled).toBe(true);
-    expect(validateSettings({ checkoutReadingEnabled: false }).checkoutReadingEnabled).toBe(false);
+    expect(validateSettings({ checkoutReadingEnabled: true, theme: "system" }).checkoutReadingEnabled).toBe(true);
+    expect(validateSettings({ checkoutReadingEnabled: false, theme: "system" }).checkoutReadingEnabled).toBe(false);
     expect(() => validateSettings({})).toThrow(StorageSchemaError);
-    expect(() => validateSettings({ checkoutReadingEnabled: "yes" })).toThrow(StorageSchemaError);
+    expect(() => validateSettings({ theme: "system" })).toThrow(/missing required field "checkoutReadingEnabled"/);
+    expect(() => validateSettings({ checkoutReadingEnabled: "yes", theme: "system" })).toThrow(StorageSchemaError);
+  });
+
+  // §4.5 (first-run UX spec) -- theme is required in exactly the same
+  // sense checkoutReadingEnabled is: validateSettings (called directly,
+  // as opposed to through PlanLedger.readSettings()'s migration) demands
+  // the complete, current field set. THEME_VALUES/DEFAULT_THEME are
+  // exported so this test (and ThemeChoice.ts) never hand-roll a second
+  // copy of the closed union.
+  describe("theme", () => {
+    it("THEME_VALUES is exactly [system, light, dark], and DEFAULT_THEME is system", () => {
+      expect(THEME_VALUES).toEqual(["system", "light", "dark"]);
+      expect(DEFAULT_THEME).toBe("system");
+    });
+
+    it("accepts all three closed values", () => {
+      for (const theme of THEME_VALUES) {
+        expect(validateSettings({ checkoutReadingEnabled: false, theme }).theme).toBe(theme);
+      }
+    });
+
+    it("rejects a value outside the closed union, case-sensitively, and rejects non-string values", () => {
+      for (const bad of ["Dark", "", null, undefined, 1, "SYSTEM", "auto"]) {
+        expect(() => validateSettings({ checkoutReadingEnabled: false, theme: bad })).toThrow(StorageSchemaError);
+      }
+    });
+
+    it("is required -- a record missing theme entirely is rejected, not defaulted (only PlanLedger.readSettings()'s migration path defaults it)", () => {
+      expect(() => validateSettings({ checkoutReadingEnabled: false })).toThrow(StorageSchemaError);
+      expect(() => validateSettings({ checkoutReadingEnabled: false })).toThrow(/missing required field "theme"/);
+    });
+
+    // The exact trap the spec calls out (§4.5): assertClosedFieldSet
+    // rejects a MISSING field just as loudly as an unknown one, so a
+    // caller that still calls the raw, partial-record writeSettings() the
+    // way the two PopupApp.ts call sites used to must now fail loudly
+    // rather than silently drop theme. RED if writeSettings ever goes back
+    // to tolerating a partial record.
+    it("PlanLedger.writeSettings still rejects a partial record missing theme -- callers must route through updateSettings instead", async () => {
+      const store = memoryStore();
+      const ledger = new PlanLedger(store);
+      await expect(ledger.writeSettings({ checkoutReadingEnabled: true })).rejects.toThrow(StorageSchemaError);
+      await expect(ledger.writeSettings({ checkoutReadingEnabled: true })).rejects.toThrow(
+        /missing required field "theme"/,);
+      expect(store.data.settings).toBeUndefined();
+    });
   });
 
   // Regression risk called out explicitly: adding a field to the SETTINGS
@@ -146,14 +206,51 @@ describe("PlanLedger.readSettings() -- the measurementEnabled removal migration 
     expect(store.data.settings).toBeUndefined();
   });
 
-  it("an already-clean record (checkoutReadingEnabled only) round-trips without a rewrite", async () => {
+  it("an already-clean record (checkoutReadingEnabled + theme) round-trips without a rewrite", async () => {
     const store = memoryStore();
-    store.data.settings = { checkoutReadingEnabled: true };
+    store.data.settings = { checkoutReadingEnabled: true, theme: "light" };
     const ledger = new PlanLedger(store);
     const settings = (await ledger.readSettings()) as Settings;
     expect(settings.checkoutReadingEnabled).toBe(true);
-    // Still exactly the same shape -- no stray field appeared.
-    expect(Object.keys(store.data.settings as object)).toEqual(["checkoutReadingEnabled"]);
+    expect(settings.theme).toBe("light");
+    // Still exactly the same shape -- no stray field appeared, and the
+    // explicit "light" choice was not silently reset to "system".
+    expect(store.data.settings).toEqual({ checkoutReadingEnabled: true, theme: "light" });
+  });
+
+  // §4.5 step 4 (first-run UX spec) -- the exact scenario the task calls
+  // out: an install that predates `theme` entirely must migrate to
+  // "system", never an arbitrary light/dark, and this must not be
+  // conflated with (or disturb) the separate checkoutReadingEnabled
+  // migration -- a genuinely consented-in install stays consented-in.
+  it("a record with checkoutReadingEnabled only (no theme field at all) migrates theme to 'system' on read, without disturbing checkoutReadingEnabled", async () => {
+    const store = memoryStore();
+    store.data.settings = { checkoutReadingEnabled: true };
+    const ledger = new PlanLedger(store);
+
+    const settings = (await ledger.readSettings()) as Settings;
+    expect(settings.checkoutReadingEnabled).toBe(true);
+    expect(settings.theme).toBe("system");
+
+    // Written back clean -- a second, independent read sees the same
+    // migrated shape, not a re-migration every time.
+    expect(store.data.settings).toEqual({ checkoutReadingEnabled: true, theme: "system" });
+    const secondLedger = new PlanLedger(store);
+    expect(((await secondLedger.readSettings()) as Settings).theme).toBe("system");
+  });
+
+  // A corrupted/foreign theme value (never written by this codebase) must
+  // migrate the same safe way as a missing one -- rejecting it outright
+  // would turn a single bad byte in storage into a permanently broken
+  // popup (readSettings() is on the init() happy path for every open).
+  it("a record with an invalid theme value migrates it to 'system' on read, rather than throwing", async () => {
+    const store = memoryStore();
+    store.data.settings = { checkoutReadingEnabled: false, theme: "midnight" };
+    const ledger = new PlanLedger(store);
+
+    const settings = (await ledger.readSettings()) as Settings;
+    expect(settings.theme).toBe("system");
+    expect(store.data.settings).toEqual({ checkoutReadingEnabled: false, theme: "system" });
   });
 
   // The migration itself: an old record still carrying measurementEnabled
@@ -168,12 +265,13 @@ describe("PlanLedger.readSettings() -- the measurementEnabled removal migration 
 
     const settings = (await ledger.readSettings()) as Settings;
     expect(settings.checkoutReadingEnabled).toBe(false);
+    expect(settings.theme).toBe("system");
     expect((settings as unknown as Record<string, unknown>).measurementEnabled).toBeUndefined();
 
     // The migration WROTE BACK the cleaned record -- not just returned a
     // cleaned view of a still-dirty store. A second, independent read
     // must see it gone too.
-    expect(store.data.settings).toEqual({ checkoutReadingEnabled: false });
+    expect(store.data.settings).toEqual({ checkoutReadingEnabled: false, theme: "system" });
     const secondLedger = new PlanLedger(store);
     const secondRead = (await secondLedger.readSettings()) as Settings;
     expect((secondRead as unknown as Record<string, unknown>).measurementEnabled).toBeUndefined();
@@ -186,7 +284,8 @@ describe("PlanLedger.readSettings() -- the measurementEnabled removal migration 
 
     const settings = (await ledger.readSettings()) as Settings;
     expect(settings.checkoutReadingEnabled).toBe(false);
-    expect(store.data.settings).toEqual({ checkoutReadingEnabled: false });
+    expect(settings.theme).toBe("system");
+    expect(store.data.settings).toEqual({ checkoutReadingEnabled: false, theme: "system" });
   });
 
   it("a malformed (non-object) settings value migrates to the safe default rather than throwing", async () => {
@@ -196,7 +295,54 @@ describe("PlanLedger.readSettings() -- the measurementEnabled removal migration 
 
     const settings = (await ledger.readSettings()) as Settings;
     expect(settings.checkoutReadingEnabled).toBe(false);
-    expect(store.data.settings).toEqual({ checkoutReadingEnabled: false });
+    expect(settings.theme).toBe("system");
+    expect(store.data.settings).toEqual({ checkoutReadingEnabled: false, theme: "system" });
+  });
+});
+
+describe("PlanLedger.updateSettings -- the read-modify-write helper §4.5 step 5 requires", () => {
+  it("a partial patch mentioning only checkoutReadingEnabled preserves the existing theme value", async () => {
+    const store = memoryStore();
+    const ledger = new PlanLedger(store);
+    await ledger.writeSettings({ checkoutReadingEnabled: false, theme: "dark" });
+
+    const settings = await ledger.updateSettings({ checkoutReadingEnabled: true });
+    expect(settings.checkoutReadingEnabled).toBe(true);
+    expect(settings.theme).toBe("dark");
+    expect(store.data.settings).toEqual({ checkoutReadingEnabled: true, theme: "dark" });
+  });
+
+  it("a partial patch mentioning only theme preserves the existing checkoutReadingEnabled value", async () => {
+    const store = memoryStore();
+    const ledger = new PlanLedger(store);
+    await ledger.writeSettings({ checkoutReadingEnabled: true, theme: "system" });
+
+    const settings = await ledger.updateSettings({ theme: "light" });
+    expect(settings.checkoutReadingEnabled).toBe(true);
+    expect(settings.theme).toBe("light");
+    expect(store.data.settings).toEqual({ checkoutReadingEnabled: true, theme: "light" });
+  });
+
+  // The never-onboarded case: settings === null (readSettings()'s
+  // has-onboarded sentinel) must still produce a complete, valid record
+  // for the untouched field -- this is what lets the onboarding screen's
+  // Continue handler call updateSettings() instead of writeSettings()
+  // without special-casing "there is nothing to merge with yet".
+  it("on a never-onboarded install, a patch mentioning only one field still produces a complete record using DEFAULT_THEME/false for the other", async () => {
+    const store = memoryStore();
+    const ledger = new PlanLedger(store);
+    expect(store.data.settings).toBeUndefined();
+
+    const settings = await ledger.updateSettings({ checkoutReadingEnabled: true });
+    expect(settings.checkoutReadingEnabled).toBe(true);
+    expect(settings.theme).toBe(DEFAULT_THEME);
+    expect(store.data.settings).toEqual({ checkoutReadingEnabled: true, theme: DEFAULT_THEME });
+  });
+
+  it("rejects an invalid theme in the patch, the same as writeSettings/validateSettings would", async () => {
+    const store = memoryStore();
+    const ledger = new PlanLedger(store);
+    await expect(ledger.updateSettings({ theme: "invalid" as never })).rejects.toThrow(StorageSchemaError);
   });
 });
 

@@ -20,7 +20,7 @@ import {
   INSTALLMENT_COUNT_MIN,
   STORAGE_SCHEMA_VERSION,
 } from "../shared/constants";
-import type { PaymentPlanRecord } from "../shared/types";
+import type { PaymentPlanRecord, Theme } from "../shared/types";
 import type { KeyValueStore } from "./store";
 
 /** The complete set of top-level storage keys. Nothing else may persist. */
@@ -40,7 +40,34 @@ const PLAN_FIELD_ALLOWLIST = [
   "firstPaymentDate",
 ] as const;
 
-const SETTINGS_FIELD_ALLOWLIST = ["checkoutReadingEnabled"] as const;
+/**
+ * Exported (unlike PLAN_FIELD_ALLOWLIST/USAGE_FIELD_ALLOWLIST above) for
+ * the same reason STORAGE_KEY_ALLOWLIST is: `theme`'s addition here
+ * (first-run UX spec §4.5) is a deliberate, reviewed schema change, not a
+ * silent one, and a direct test against this array is what makes that
+ * review visible rather than only inferable from validateSettings'
+ * behaviour.
+ *
+ * `assertClosedFieldSet` below enforces this set in BOTH directions --
+ * an unknown field is rejected, and so is a MISSING one. That second half
+ * is what makes `theme`'s addition a real cost: every existing partial
+ * `writeSettings({ checkoutReadingEnabled: ... })` call now throws
+ * "settings is missing required field \"theme\"". `PlanLedger.updateSettings`
+ * below is the fix -- a read-modify-write helper every call site routes
+ * through instead of hand-rolling its own merge (see its own doc comment).
+ */
+export const SETTINGS_FIELD_ALLOWLIST = ["checkoutReadingEnabled", "theme"] as const;
+
+/** The closed set of valid `Settings.theme` values (first-run UX spec §4.3):
+ * exactly three states, never two -- a two-position control would have no
+ * position that means "follow the OS", so the first interaction would
+ * silently and permanently destroy that behaviour with no way back. */
+export const THEME_VALUES = ["system", "light", "dark"] as const;
+
+/** The safe migration target for an install that predates `theme`
+ * entirely (§4.5 step 4) -- never an arbitrary light/dark, and never
+ * treated as consent-shaped data. */
+export const DEFAULT_THEME: Theme = "system";
 
 /** The complete, closed field set of the usage-flags record (UI state only
  * — never a merchant/url/financial value, see FORBIDDEN_KEY_SUBSTRINGS
@@ -117,6 +144,10 @@ export interface Settings {
    * (chrome.storage.onChanged), not merely stop starting new ones.
    */
   readonly checkoutReadingEnabled: boolean;
+
+  /** See the `Theme` type doc (src/shared/types.ts) for the full
+   * first-run-UX-spec §4 rationale. */
+  readonly theme: Theme;
 }
 
 /** UI state for the popup's post-usefulness email-invite gate — never a
@@ -207,6 +238,9 @@ export function validateSettings(raw: unknown): Settings {
   if (typeof record.checkoutReadingEnabled !== "boolean") {
     throw new StorageSchemaError("checkoutReadingEnabled must be a boolean");
   }
+  if (!THEME_VALUES.includes(record.theme as Theme)) {
+    throw new StorageSchemaError(`theme must be one of ${THEME_VALUES.join(", ")}`);
+  }
   return record as unknown as Settings;
 }
 
@@ -247,7 +281,8 @@ function isAlreadyCleanSettingsRecord(record: Record<string, unknown>): boolean 
   return (
     keys.length === SETTINGS_FIELD_ALLOWLIST.length &&
     keys.every((k) => (SETTINGS_FIELD_ALLOWLIST as readonly string[]).includes(k)) &&
-    typeof record.checkoutReadingEnabled === "boolean"
+    typeof record.checkoutReadingEnabled === "boolean" &&
+    THEME_VALUES.includes(record.theme as Theme)
   );
 }
 
@@ -291,6 +326,12 @@ export class PlanLedger {
    * never-onboarded case) -- that absence is meaningful (PopupApp.init()
    * uses it to decide whether to show onboarding) and is never turned
    * into a settings record of its own.
+   *
+   * `theme` (first-run UX spec §4.5 step 4) is migrated the same way,
+   * independently of checkoutReadingEnabled: an install that predates the
+   * field, or carries a corrupted value, reads back as DEFAULT_THEME
+   * ("system") -- never an arbitrary light/dark, and never inferred from
+   * (or mixed into) the consent field's own migration.
    */
   async readSettings(): Promise<Settings | null> {
     const result = await this.store.get(["settings"]);
@@ -299,7 +340,8 @@ export class PlanLedger {
 
     const record = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
     const checkoutReadingEnabled = record.checkoutReadingEnabled === true;
-    const settings = validateSettings({ checkoutReadingEnabled });
+    const theme = THEME_VALUES.includes(record.theme as Theme) ? (record.theme as Theme) : DEFAULT_THEME;
+    const settings = validateSettings({ checkoutReadingEnabled, theme });
 
     if (!isAlreadyCleanSettingsRecord(record)) {
       await this.store.set({ settings });
@@ -311,5 +353,27 @@ export class PlanLedger {
     const settings = validateSettings(raw);
     await this.store.set({ settings });
     return settings;
+  }
+
+  /**
+   * The read-modify-write helper the first-run UX spec (§4.5 step 5)
+   * requires now that SETTINGS_FIELD_ALLOWLIST holds more than one field:
+   * assertClosedFieldSet rejects a MISSING field just as loudly as an
+   * unknown one, so a caller that only wants to flip `checkoutReadingEnabled`
+   * (Settings' own toggle) or only `theme` (the appearance group) can no
+   * longer call writeSettings() with a partial record -- it would now
+   * throw `settings is missing required field "..."`. This reads the
+   * current, already-migrated record (readSettings(), defaulting to
+   * `{ checkoutReadingEnabled: false, theme: DEFAULT_THEME }` for a
+   * never-onboarded install so a first write from either control still
+   * produces a complete, valid record), applies `patch` on top, and writes
+   * the full result back through the same validated writeSettings() --
+   * every call site gets this for free instead of hand-rolling its own
+   * merge, which is what would let a THIRD call site reintroduce the exact
+   * bug this closes.
+   */
+  async updateSettings(patch: Partial<Settings>): Promise<Settings> {
+    const current = (await this.readSettings()) ?? { checkoutReadingEnabled: false, theme: DEFAULT_THEME };
+    return this.writeSettings({ ...current, ...patch });
   }
 }

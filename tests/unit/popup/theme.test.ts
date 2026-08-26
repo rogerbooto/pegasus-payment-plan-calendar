@@ -58,13 +58,17 @@ describe("BUG 2 — popup design tokens resolve in a normal-document context", (
 
   it("POPUP_CSS's dark-mode block also re-declares tokens on :root, not just :host", () => {
     // POPUP_CSS inlines OVERLAY_CSS, which has its OWN
-    // `@media (prefers-color-scheme: dark) { :host {...} }` block -- so
-    // this test must find the popup's OWN dark block specifically (the
-    // one whose immediate child selector is `:root`, not `:host`), not
-    // just the first `@media (prefers-color-scheme: dark)` in the file.
-    const darkRootMatch = /@media \(prefers-color-scheme: dark\)\s*\{\s*:root\s*\{/.exec(POPUP_CSS);
+    // `@media (prefers-color-scheme: dark) { :host(:not(...)) {...} }`
+    // block -- so this test must find the popup's OWN dark block
+    // specifically (the one whose immediate child selector is `:root`,
+    // not `:host`), not just the first `@media (prefers-color-scheme:
+    // dark)` in the file. The selector carries the §4 (first-run UX spec)
+    // `:not([data-theme="light"])` scoping -- see the dedicated §4.10
+    // describe block below for why.
+    const darkRootMatch = /@media \(prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\)\s*\{/.exec(
+      POPUP_CSS,);
     expect(darkRootMatch).not.toBeNull();
-    const darkRootBody = ruleBody(POPUP_CSS.slice(darkRootMatch!.index), /:root\s*\{/);
+    const darkRootBody = ruleBody(POPUP_CSS.slice(darkRootMatch!.index), /:root:not\(\[data-theme="light"\]\)\s*\{/);
     expect(darkRootBody).not.toBeNull();
     expect(darkRootBody).toContain(DARK_TOKENS.trim());
   });
@@ -101,11 +105,12 @@ describe("§3.5 — the labelled Settings control has a RESTING (not hover-only)
   });
 });
 
-// §4.10 case 1 (first-run UX spec) -- D4's regression guard. Only the
-// token fix ships in this build (the three-state manual override in §4 is
-// deferred); this still needs its own pinned test so a future edit cannot
-// silently drop the page-bg fix that resolved the founder's actual
-// complaint (a dark panel on a still-light page in both extension pages).
+// §4.10 case 1 (first-run UX spec) -- D4's regression guard, and a
+// prerequisite for §4's manual override: layering a three-state override
+// on top of an incomplete dark-mode fix would just move the founder's
+// original complaint (a dark panel on a still-light page) behind a
+// control instead of removing it. Pinned so a future edit cannot silently
+// drop the page-bg fix.
 describe("D4 — DARK_TOKENS declares --page-bg", () => {
   it("DARK_TOKENS carries a --page-bg declaration", () => {
     expect(DARK_TOKENS).toMatch(/--page-bg:\s*#[0-9a-fA-F]{3,6}/);
@@ -115,6 +120,47 @@ describe("D4 — DARK_TOKENS declares --page-bg", () => {
     const sabotaged = DARK_TOKENS.replace(/--page-bg:[^;]+;/, "");
     expect(sabotaged).not.toMatch(/--page-bg:/);
     expect(DARK_TOKENS).toMatch(/--page-bg:/);
+  });
+});
+
+// §4.10 cases 2-3 (first-run UX spec) -- the manual appearance override's
+// CSS mechanism: a `data-theme` attribute, scoped so "system" (no
+// attribute) keeps the plain media-query behaviour untouched, "light"
+// excludes the dark-on-dark-OS rule, and "dark" pins the dark tokens
+// unconditionally. Case 1 (POPUP_CSS's own dark block) is covered by the
+// "re-declares tokens on :root" test above; these are the two other
+// selector shapes plus the OVERLAY_CSS parity guard.
+describe("§4.10 cases 2-3 — the data-theme override selectors exist on both :root and :host", () => {
+  it('POPUP_CSS declares :root[data-theme="dark"] carrying DARK_TOKENS', () => {
+    const body = ruleBody(POPUP_CSS, /:root\[data-theme="dark"\]\s*\{/);
+    expect(body).not.toBeNull();
+    expect(body).toContain(DARK_TOKENS.trim());
+  });
+
+  it('OVERLAY_CSS declares :host([data-theme="dark"]) carrying DARK_TOKENS -- the overlay is not silently excluded from the override', () => {
+    const body = ruleBody(OVERLAY_CSS, /:host\(\[data-theme="dark"\]\)\s*\{/);
+    expect(body).not.toBeNull();
+    expect(body).toContain(DARK_TOKENS.trim());
+  });
+
+  it('OVERLAY_CSS\'s own dark media query is scoped with :not([data-theme="light"]), matching POPUP_CSS\'s scoping', () => {
+    const darkHostMatch = /@media \(prefers-color-scheme: dark\)\s*\{\s*:host\(:not\(\[data-theme="light"\]\)\)\s*\{/.exec(
+      OVERLAY_CSS,);
+    expect(darkHostMatch).not.toBeNull();
+    const body = ruleBody(OVERLAY_CSS.slice(darkHostMatch!.index), /:host\(:not\(\[data-theme="light"\]\)\)\s*\{/);
+    expect(body).toContain(DARK_TOKENS.trim());
+  });
+
+  it("liveness -- an OVERLAY_CSS with the :host([data-theme=\"dark\"]) rule stripped is caught by the assertion above", () => {
+    const sabotaged = OVERLAY_CSS.replace(/:host\(\[data-theme="dark"\]\)\s*\{[^}]*\}/, "");
+    expect(ruleBody(sabotaged, /:host\(\[data-theme="dark"\]\)\s*\{/)).toBeNull();
+  });
+
+  it('liveness -- an unscoped dark media query (":host {...}" instead of ":host(:not([data-theme=light]))") is caught by the scoping assertion above', () => {
+    const sabotaged = OVERLAY_CSS.replace('@media (prefers-color-scheme: dark) {\n  :host(:not([data-theme="light"])) {', '@media (prefers-color-scheme: dark) {\n  :host {');
+    const stillMatches = /@media \(prefers-color-scheme: dark\)\s*\{\s*:host\(:not\(\[data-theme="light"\]\)\)\s*\{/.test(
+      sabotaged,);
+    expect(stillMatches).toBe(false);
   });
 });
 

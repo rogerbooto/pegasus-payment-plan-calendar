@@ -7,6 +7,18 @@ import type { Cents } from "./money";
 export type Currency = "CAD" | "USD";
 export type Cadence = "WEEKLY" | "BIWEEKLY" | "MONTHLY";
 
+/**
+ * The manual appearance override (first-run UX spec §4): "system" (the
+ * default) genuinely follows the OS's `prefers-color-scheme`, in both
+ * extension pages and the checkout overlay -- "light"/"dark" pin it
+ * regardless of the OS. Persisted at `Settings.theme`
+ * (src/storage/ledger.ts) and applied as a `data-theme` attribute on the
+ * popup/tab document element and the overlay's host element
+ * (`applyThemeAttribute`, src/overlay/theme.ts) -- never inferred, never
+ * written except through `PlanLedger.updateSettings`/`writeSettings`.
+ */
+export type Theme = "system" | "light" | "dark";
+
 /** Calendar date as an ISO `YYYY-MM-DD` string (validated at storage seams). */
 export type IsoDate = string;
 
