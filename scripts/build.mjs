@@ -1,7 +1,7 @@
 // Produces a loadable unpacked extension in dist/.
 // Deterministic on purpose: no sourcemaps, no minification, fixed target.
 import { build } from "esbuild";
-import { copyFile, mkdir } from "node:fs/promises";
+import { copyFile, mkdir, readdir } from "node:fs/promises";
 
 await build({
   entryPoints: {
@@ -21,3 +21,10 @@ await build({
 await mkdir("dist", { recursive: true });
 await copyFile("src/manifest.json", "dist/manifest.json");
 await copyFile("src/popup/popup.html", "dist/popup.html");
+
+// Toolbar/store icons. Derived from the Pegasus mark; see the trademark note in
+// README — the code is GPL-3.0, the marks are not covered by that grant.
+await mkdir("dist/icons", { recursive: true });
+for (const f of await readdir("src/icons")) {
+  await copyFile(`src/icons/${f}`, `dist/icons/${f}`);
+}

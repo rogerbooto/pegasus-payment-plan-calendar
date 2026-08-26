@@ -34,6 +34,10 @@ const REVIEWED_TOP_LEVEL_KEYS = [
   "background",
   "action",
   "content_security_policy",
+  // Toolbar and store icons. Static image assets only — an icon cannot execute,
+  // request a permission, or reach the network, so this widens no surface. Added
+  // deliberately: the ratchet above flagged it, which is the ratchet working.
+  "icons",
 ] as const;
 
 function findUnreviewedTopLevelKeys(m: Record<string, unknown>): string[] {
