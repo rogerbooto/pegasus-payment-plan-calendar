@@ -130,7 +130,7 @@ describe("OverlayHost — anchoring (T11/T13)", () => {
     expect(form.outerHTML).toBe(formSnapshotBefore);
   });
 
-  it("leaves no Watcher-authored marker in page DOM after unmount (T10)", () => {
+  it("leaves no marker of its own in page DOM after unmount (T10)", () => {
     const bodyChildCountBefore = document.body.children.length;
     const controller = createOverlayHost(document, makeDeps());
     controller.mount(recognizedState());
