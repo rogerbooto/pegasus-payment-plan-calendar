@@ -35,7 +35,25 @@ export const LIGHT_TOKENS = `
   --shadow: 0 10px 30px rgba(30,30,30,.10), 0 2px 6px rgba(30,30,30,.06);
 `;
 
+/**
+ * D4 (first-run UX spec, §4.1): this block used to omit `--page-bg`
+ * entirely, so `html, body { background: var(--page-bg, #f9f8f5) }`
+ * (popup/theme.ts) kept the LIGHT page background under a dark panel in
+ * both extension pages -- a dark card floating on a near-white page. Fixed
+ * here with a genuinely dark value, not a copy of the light one.
+ *
+ * Three other LIGHT_TOKENS entries are still absent below, and that is
+ * deliberate, not an oversight (recorded per the spec's instruction so a
+ * future editor does not "fix" them):
+ *   --panel-w   is a size, not a colour -- there is no dark-mode variant.
+ *   --gold      the on-brand accent stays identical in both schemes; the
+ *               gold-on-dark contrast was measured at 6.90:1 (spec §1.10)
+ *               and re-declaring it here would just repeat the same value.
+ *   --btn-ink   pairs with --gold (the primary button's own text colour);
+ *               it inherits from light for the same reason --gold does.
+ */
 export const DARK_TOKENS = `
+  --page-bg: #1a1a1a;
   --panel-bg: #262626;
   --panel-alt: #313131;
   --border: #333333;
@@ -106,6 +124,23 @@ export const OVERLAY_CSS = `
 }
 .iconbtn:hover { background: var(--panel-alt); color: var(--text); }
 
+/*
+ * §3 (first-run UX spec) — the Settings control passed 2.5.8 (44x44) and
+ * 1.4.3 (7.34:1) while still reading as undiscoverable, because a passing
+ * measurement is not the same thing as a visible affordance (D10). This
+ * variant adds a RESTING border/fill (not hover-only) and a permanent text
+ * label, on top of (never instead of) the min-width/min-height above.
+ */
+.iconbtn--labeled {
+  width: auto; height: auto; padding: 0 12px 0 8px; gap: 6px;
+  border-color: var(--control-line); background: var(--panel-alt);
+  color: var(--text-2); font-size: 13px; font-weight: 700;
+}
+.iconbtn--labeled:hover { background: var(--border); color: var(--text); }
+.iconbtn--labeled:active { background: var(--border-strong); }
+.iconbtn__glyph { font-size: 14px; line-height: 1; }
+.iconbtn__label { font: inherit; }
+
 .tabs { display: flex; gap: 22px; padding: 0 16px; border-bottom: 1px solid var(--border); flex: none; }
 .tab {
   background: none; border: none; border-bottom: 2px solid transparent;
@@ -115,6 +150,10 @@ export const OVERLAY_CSS = `
 .tab[aria-selected="true"] { color: var(--gold-ink); font-weight: 700; border-bottom-color: var(--gold-ink); }
 
 .panel__body { padding: 18px 16px 16px; overflow-y: auto; flex: 1 1 auto; }
+/* §5 R4 continued: reserves room below the last field so the sticky
+   .form__actions row (bottom: 0 of this scroll container) can never sit
+   on top of it once scrolled all the way down. */
+.panel__body:has(form) { padding-bottom: 64px; }
 .panel__foot {
   padding: 12px 16px 14px; border-top: 1px solid var(--border);
   font-size: 12px; line-height: 1.45; color: var(--text-3); flex: none;
@@ -146,6 +185,16 @@ export const OVERLAY_CSS = `
 }
 
 .actions { display: flex; align-items: center; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+/*
+ * Section 5, rule R4 (first-run UX spec) -- the confirmation/manual-entry
+ * form's own submit row (X6: was an inline style="margin-top:2px"
+ * attribute, moved here). It sticks to the bottom of the scrolling
+ * .panel__body so growth above it (the preview, the arithmetic note, a
+ * save-failure line) can never push it below the fold or out from under a
+ * pointer that is already reaching for it. An opaque panel-matching
+ * background keeps scrolled-past content from showing through underneath.
+ */
+.form__actions { margin-top: 2px; position: sticky; bottom: 0; z-index: 1; background: var(--panel-bg); padding-top: 10px; padding-bottom: 2px; }
 .btn {
   font: 700 14px inherit; border-radius: 100px; border: 1px solid transparent;
   min-height: 44px; padding: 11px 20px; cursor: pointer;
@@ -188,6 +237,16 @@ export const OVERLAY_CSS = `
 @media (max-width: 420px) { .grid2 { grid-template-columns: 1fr; } }
 .echo { background: var(--panel-alt); border-radius: 8px; padding: 11px 13px; font-size: 13px; line-height: 1.45; margin: 4px 0 15px; color: var(--text); }
 .echo .d { font-weight: 700; font-variant-numeric: tabular-nums; }
+/*
+ * Section 5 / D6 (first-run UX spec) -- R1: while there is nothing to
+ * preview, the live region stays in the DOM (R2, so it can announce
+ * reliably once filled) but occupies zero space -- no reserved ~40px
+ * empty bar bought at the direct expense of the submit row below the
+ * fold. R3: this is an explicit class the same code sets/clears on every
+ * recompute, not an :empty selector (:empty semantics around zero-length
+ * text nodes vary across engines).
+ */
+.echo--empty { padding: 0; margin: 0; background: none; border: none; }
 .note { border-left: 2px solid var(--border-strong); padding-left: 11px; font-size: 12.5px; line-height: 1.5; color: var(--text-2); margin-bottom: 15px; }
 .note b { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
 

@@ -37,7 +37,27 @@ html, body {
   background: var(--page-bg, #f9f8f5);
   margin: 0; padding: 0;
 }
-.popup-root .panel { width: 340px; max-width: 100vw; position: static; box-shadow: none; border: none; }
+/*
+ * D5 (first-run UX spec, §6): max-width: 100vw ignores this document's own
+ * body padding, so at narrow widths the panel's fixed width plus the
+ * surrounding padding exceeded the viewport and forced a horizontal
+ * scrollbar. max-width: 100% resolves against the containing block
+ * instead (already padding-aware), which is what actually keeps this
+ * inside the viewport at 375px.
+ *
+ * Bug fix independent of the spec (diagnosed separately, verified against
+ * this codebase): max-height: min(72vh, 640px) on .panel (overlay/theme.ts)
+ * is correct for the checkout-page overlay, which floats over a
+ * merchant's page and must not take over the screen. It is NOT correct
+ * here -- the toolbar popup and the full-page welcome tab are not
+ * floating over anything, and inheriting that cap produced an inner
+ * scrollbar plus a clipped form on an otherwise empty full-height page.
+ * max-height: none scopes the cap back to the overlay context only; both
+ * extension-page surfaces now grow to their content (the toolbar popup's
+ * own window sizing, or the tab's ordinary page scroll, then handles
+ * anything taller than the viewport).
+ */
+.popup-root .panel { width: 340px; max-width: 100%; max-height: none; position: static; box-shadow: none; border: none; }
 
 .popup__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
 .popup__row:last-of-type { border-bottom: none; }
@@ -71,7 +91,18 @@ html, body {
 .verify__list li { margin-bottom: 6px; }
 .verify__caveat { margin-top: 14px; font-size: 11.5px; line-height: 1.5; color: var(--text-3); border-top: 1px solid var(--border); padding-top: 12px; }
 
-.onboard { width: 380px; max-width: 100vw; padding: 20px 20px 22px; background: var(--panel-bg); border-radius: 16px; }
+/*
+ * D7 (first-run UX spec, §6/§8): the onboarding screen and the hero screen
+ * used to render at two different widths (380px vs. the popup panel's
+ * 340px), so pressing Continue visibly resized the Chrome popup window.
+ * 340px is now the shared default (matching .popup-root .panel above);
+ * the toolbar-popup surface never sets .popup-root--tab, so it stays at
+ * 340px end to end. The welcome TAB is a full page, not an autosized
+ * window, so the wider, more legible 380px box is kept there
+ * (surface: "tab" adds popup-root--tab, PopupApp.ts).
+ */
+.onboard { width: 340px; max-width: 100%; padding: 20px 20px 22px; background: var(--panel-bg); border-radius: 16px; }
+.popup-root--tab .onboard { width: 380px; }
 .onboard__eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--gold-ink); margin-bottom: 8px; }
 .onboard h3 { font-family: 'Playfair Display', Georgia, serif; font-size: 20px; font-weight: 600; margin-bottom: 10px; }
 .onboard p { font-size: 13.5px; line-height: 1.55; color: var(--text-2); }
@@ -79,30 +110,9 @@ html, body {
 .onboard__block { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
 .onboard__block h4 { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
 .onboard__row { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
-/*
- * The check glyph's box (width + margin) is reserved at ALL times, pressed
- * or not -- only visibility toggles. Letting display flip between none
- * and inline-flex (the previous rule) removed the box entirely in the
- * unpressed state, so pressing a button shoved its label sideways by the
- * box's own width + margin. visibility: hidden keeps the box (and the
- * label's position) identical in both states; only the glyph's own paint
- * toggles. color: currentColor means the glyph always matches whichever
- * button variant it's inside (btn--primary's --btn-ink, btn--ghost's
- * --text) without a second, hardcoded colour.
- */
-.btn__check {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 13px;
-  height: 13px;
-  margin-right: 6px;
-  flex: 0 0 auto;
-  font-size: 11px;
-  line-height: 1;
-  color: currentColor;
-  visibility: hidden;
-}
-.btn[aria-pressed="true"] .btn__check { visibility: visible; }
-.btn[aria-pressed="true"] { box-shadow: 0 0 0 4px var(--focus); }
+.onboard__actions { margin-top: 22px; }
+
+/* §2 (first-run UX spec) — the tab-only "you can leave now" line, styled
+   identically to the onboarding screen's other small print. */
+.hero__donenote { font-size: 11.5px; color: var(--text-3); margin-bottom: 10px; }
 `;

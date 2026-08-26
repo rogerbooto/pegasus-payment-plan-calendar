@@ -61,9 +61,25 @@ export const ONBOARD_EYEBROW = "Before we start";
 export const ONBOARD_TITLE = "Payment Plan Calendar";
 export const ONBOARD_BODY =
   "Until you turn this on, no checkout page is read. Once it's on, this looks at checkout pages you visit to spot an option to pay in installments. When it finds one, it reads four numbers — the order total, the number of payments, how often they're due, and the amount of each payment — and shows you those dates on a calendar next to plans you've already added. Everything stays on this device. Nothing is sent anywhere. You can turn it off again any time from Settings.";
-export const ONBOARD_TURN_ON = "Turn this on";
-export const ONBOARD_NO_THANKS = "No thanks";
+/**
+ * The consent switch's own description line (first-run UX spec §1.5-1.6),
+ * shown alongside SETTINGS_CHECKOUT_READING_LABEL on the FIRST-RUN screen
+ * only -- Settings shows the static SETTINGS_CHECKOUT_READING_DESC instead,
+ * since by then there is no "before you decide" framing left to state.
+ * Replaces the removed ONBOARD_TURN_ON / ONBOARD_NO_THANKS button pair,
+ * whose gold emphasis on the permissive option pointed the opposite way
+ * from what Continue-without-clicking actually persisted (D1).
+ */
+export const ONBOARD_CONSENT_STATE_OFF = "Off — no checkout page is read.";
+export const ONBOARD_CONSENT_STATE_ON =
+  "On — checkout pages you visit are read for an installment-plan option.";
 export const ONBOARD_SKIP_NOTE = "Either way, adding plans by hand and the calendar still work.";
+/**
+ * The switch above is local UI state until Continue is pressed (§1.4) --
+ * this line is what keeps that honest, so the screen never implies it is
+ * acting on a choice the user hasn't confirmed yet.
+ */
+export const ONBOARD_SAVE_NOTE = "Your choice is saved when you continue.";
 /**
  * A "counting how it's used" ask (onboarding's own copy of the removed
  * settings toggle, both from the same claim: "sends a plain count") is
@@ -76,10 +92,32 @@ export const ONBOARD_SKIP_NOTE = "Either way, adding plans by hand and the calen
 export const ONBOARD_CONTINUE = "Continue";
 
 /**
+ * Settings' own pessimistic-write failure line (first-run UX spec §1.6):
+ * the toggle there writes to storage BEFORE reflecting the new state, and
+ * reverts on a rejected write rather than ever showing a state that isn't
+ * actually stored. Rendered with role="alert", removed on the next
+ * successful toggle.
+ */
+export const SETTINGS_TOGGLE_FAILED = "That didn't save. Your browser storage may be full. Try again.";
+
+/**
+ * Tab-only hero-screen strings (first-run UX spec §2): the welcome tab has
+ * no terminal state today -- after Continue, the hero offers exactly one
+ * action forever, which on a full tab (not a popup that simply closes on
+ * blur) reads as a page that won't let you leave. CLOSE_TAB_LABEL is
+ * deliberately literal ("Close this tab", not "Done" -- which makes no
+ * claim about whether anything was saved, closed, or navigated -- and not
+ * "Skip this", which tests/static/copy-compliance.test.ts blocks outright).
+ */
+export const TAB_DONE_NOTE = "You're set. This lives in your browser toolbar from now on.";
+export const CLOSE_TAB_LABEL = "Close this tab";
+
+/**
  * Shown only on the first-run welcome tab (src/welcome/welcome.ts), not in
- * the toolbar popup — see PopupAppDeps.showPinHint in PopupApp.ts. Chrome
- * does not pin a freshly installed extension's icon to the toolbar, and no
- * extension API can pin it on the extension's own behalf. This line says
+ * the toolbar popup — see PopupAppDeps.surface in PopupApp.ts ("tab" vs.
+ * "popup", X1). Chrome does not pin a freshly installed extension's icon
+ * to the toolbar, and no extension API can pin it on the extension's own
+ * behalf. This line says
  * where the icon actually is; it deliberately does NOT promise a way back
  * to this exact onboarding screen (there isn't one once settings exist —
  * the toolbar icon opens the ordinary view after that), and instead points

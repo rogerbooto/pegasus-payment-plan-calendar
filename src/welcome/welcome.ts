@@ -30,6 +30,6 @@ if (isExtensionPageContext() && typeof document !== "undefined") {
     document.head.appendChild(styleTag(POPUP_CSS));
     document.head.appendChild(styleTag(WELCOME_CSS));
     const root = document.getElementById("ppc-welcome-root");
-    if (root) void createPopupApp(root, { showPinHint: true }).init();
+    if (root) void createPopupApp(root, { surface: "tab" }).init();
   });
 }

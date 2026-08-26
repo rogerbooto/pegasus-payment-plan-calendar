@@ -45,8 +45,16 @@ describe("PopupApp — first run gate", () => {
     await createPopupApp(el, { store }).init();
 
     expect(el.textContent).toContain("Payment Plan Calendar");
-    expect(el.querySelector('[data-consent-pair]')).not.toBeNull();
-    expect(el.textContent).toContain("Turn this on");
+    // §1 (first-run UX spec): the "Turn this on" / "No thanks" button pair
+    // is gone, replaced by a single role="switch" row, off by default.
+    const row = el.querySelector("[data-consent-switch]");
+    expect(row).not.toBeNull();
+    const sw = row?.querySelector('[role="switch"]');
+    expect(sw).not.toBeNull();
+    expect(sw?.getAttribute("aria-checked")).toBe("false");
+    // §1.7: Continue is the ONLY primary button on this screen.
+    expect(el.querySelectorAll(".btn--primary").length).toBe(1);
+    expect(el.querySelector(".btn--primary")?.textContent).toBe("Continue");
   });
 
   it("skips onboarding once settings exist, and never re-shows it after Continue", async () => {
@@ -65,24 +73,24 @@ describe("PopupApp — first run gate", () => {
 
     const el2 = root();
     await createPopupApp(el2, { store, ledger }).init();
-    expect(el2.querySelector('[data-consent-pair]')).toBeNull();
+    expect(el2.querySelector('[data-consent-switch]')).toBeNull();
     expect(el2.textContent).toContain("Payment plan dates");
   });
 
-  // BUG 1 (launch-blocking): the consent choice used to be ignored
-  // entirely -- Continue always wrote measurementEnabled: false and
-  // nothing else, regardless of which button was clicked. These three
-  // cases pin the fix: whichever of the pair was picked is what persists,
-  // and picking neither defaults to the safe (not-reading) choice, never
-  // the enabling one.
-  it("'Turn this on' then Continue persists checkoutReadingEnabled: true", async () => {
+  // D1 (launch-blocking, first-run UX spec §1.2): the consent choice used
+  // to be ignored entirely -- Continue always wrote measurementEnabled:
+  // false and nothing else, regardless of which button was clicked. These
+  // cases pin the fix on the SWITCH: whichever position it was left in is
+  // what persists, and leaving it untouched defaults to the safe
+  // (not-reading) choice, never the enabling one.
+  it("toggling the switch on, then Continue, persists checkoutReadingEnabled: true", async () => {
     const store = createFakeStore();
     const el = root();
     await createPopupApp(el, { store }).init();
 
-    const turnOnBtn = [...el.querySelectorAll("button")].find((b) => b.textContent?.includes("Turn this on")) as HTMLButtonElement;
-    turnOnBtn.click();
-    expect(turnOnBtn.getAttribute("aria-pressed")).toBe("true");
+    const sw = el.querySelector('[data-consent-switch] [role="switch"]') as HTMLButtonElement;
+    sw.click();
+    expect(sw.getAttribute("aria-checked")).toBe("true");
 
     const continueBtn = [...el.querySelectorAll("button")].find((b) => b.textContent === "Continue") as HTMLButtonElement;
     continueBtn.click();
@@ -92,16 +100,15 @@ describe("PopupApp — first run gate", () => {
     expect((settings.settings as { checkoutReadingEnabled: boolean }).checkoutReadingEnabled).toBe(true);
   });
 
-  it("'No thanks' then Continue persists checkoutReadingEnabled: false", async () => {
+  it("toggling the switch on then back off, then Continue, persists checkoutReadingEnabled: false", async () => {
     const store = createFakeStore();
     const el = root();
     await createPopupApp(el, { store }).init();
 
-    const noThanksBtn = [...el.querySelectorAll('[data-consent-pair] button')].find((b) =>
-      b.textContent?.includes("No thanks"),
-    ) as HTMLButtonElement;
-    noThanksBtn.click();
-    expect(noThanksBtn.getAttribute("aria-pressed")).toBe("true");
+    const sw = el.querySelector('[data-consent-switch] [role="switch"]') as HTMLButtonElement;
+    sw.click();
+    sw.click();
+    expect(sw.getAttribute("aria-checked")).toBe("false");
 
     const continueBtn = [...el.querySelectorAll("button")].find((b) => b.textContent === "Continue") as HTMLButtonElement;
     continueBtn.click();
@@ -111,33 +118,59 @@ describe("PopupApp — first run gate", () => {
     expect((settings.settings as { checkoutReadingEnabled: boolean }).checkoutReadingEnabled).toBe(false);
   });
 
-  // BUG 3: the .btn__check span used to have no glyph/content at all, so
-  // "selected" rendered as a blank 13px box (the visibility/layout half of
-  // this is covered by tests/unit/popup/theme.test.ts) -- but the DOM
-  // itself must actually carry a visible character for that box to ever
-  // show anything, on both buttons.
-  it("both onboarding buttons' check indicator carries real, visible content, not an empty span", async () => {
+  // §1.12 case 4 -- the regression guard for §1.4: the first-run switch is
+  // local UI state until Continue is pressed. Replaces the old
+  // ".btn__check carries real content" case, which pinned DOM the removed
+  // button pair no longer has.
+  it("toggling the first-run switch writes nothing to storage before Continue is pressed", async () => {
+    const store = createFakeStore();
+    const el = root();
+    await createPopupApp(el, { store }).init();
+
+    const sw = el.querySelector('[data-consent-switch] [role="switch"]') as HTMLButtonElement;
+    sw.click();
+    await flush();
+
+    const mid = await store.get(["settings"]);
+    expect(mid).toEqual({});
+  });
+
+  it("Continue without touching the switch defaults to checkoutReadingEnabled: false -- the safe, not-reading default, never an implicit yes", async () => {
+    const store = createFakeStore();
+    const el = root();
+    await createPopupApp(el, { store }).init();
+
+    const continueBtn = [...el.querySelectorAll("button")].find((b) => b.textContent === "Continue") as HTMLButtonElement;
+    continueBtn.click();
+    await flush();
+
+    const settings = await store.get(["settings"]);
+    expect((settings.settings as { checkoutReadingEnabled: boolean }).checkoutReadingEnabled).toBe(false);
+  });
+
+  // §1.9 -- the switch's accessible name resolves through aria-labelledby
+  // to the visible label text (jsdom has no accname computation, so this
+  // asserts the id/aria-labelledby linkage directly).
+  it("the switch's aria-labelledby points at an element whose text is the visible label", async () => {
     const el = root();
     await createPopupApp(el, { store: createFakeStore() }).init();
 
-    const checks = [...el.querySelectorAll(".btn__check")];
-    expect(checks.length).toBe(2);
-    for (const check of checks) {
-      expect((check.textContent ?? "").trim().length).toBeGreaterThan(0);
-    }
+    const sw = el.querySelector('[data-consent-switch] [role="switch"]') as HTMLButtonElement;
+    const labelledby = sw.getAttribute("aria-labelledby");
+    expect(labelledby).toBeTruthy();
+    const labelNode = document.getElementById(labelledby as string);
+    expect(labelNode?.textContent).toBe("Read checkout pages");
   });
 
-  it("Continue without picking either button defaults to checkoutReadingEnabled: false -- the safe, not-reading default, never an implicit yes", async () => {
-    const store = createFakeStore();
+  // §2.9 case 8 -- the consent screen carries no close/skip/dismiss
+  // control of its own (§2.3's considered rejection): Continue is the
+  // only way off this screen.
+  it("the consent screen renders no close/skip/dismiss control", async () => {
     const el = root();
-    await createPopupApp(el, { store }).init();
+    await createPopupApp(el, { store: createFakeStore() }).init();
 
-    const continueBtn = [...el.querySelectorAll("button")].find((b) => b.textContent === "Continue") as HTMLButtonElement;
-    continueBtn.click();
-    await flush();
-
-    const settings = await store.get(["settings"]);
-    expect((settings.settings as { checkoutReadingEnabled: boolean }).checkoutReadingEnabled).toBe(false);
+    expect([...el.querySelectorAll("button")].some((b) => /close|skip|dismiss/i.test(b.textContent ?? ""))).toBe(
+      false,);
   });
 });
 
@@ -185,7 +218,12 @@ describe("PopupApp — hero view", () => {
 
     const switches = el.querySelectorAll('[role="switch"]');
     expect(switches.length).toBe(1);
-    expect(switches[0]?.getAttribute("aria-label")).toBe("Read checkout pages");
+    // §1.5: the switch's accessible name comes from aria-labelledby now,
+    // not a duplicated aria-label (WCAG 2.5.3 -- the visible label and the
+    // accessible name cannot drift from one another).
+    const labelledby = switches[0]?.getAttribute("aria-labelledby");
+    expect(labelledby).toBeTruthy();
+    expect(document.getElementById(labelledby as string)?.textContent).toBe("Read checkout pages");
     expect(el.textContent).not.toContain("Count how often");
     expect(el.textContent).not.toContain("On this site");
     expect(el.textContent).not.toContain("Everywhere");
@@ -214,9 +252,7 @@ describe("PopupApp — hero view", () => {
 
 describe("PopupApp — the Settings consent toggle actually flips the stored value (guardian review 2026-08-26, item 1)", () => {
   function findCheckoutReadingSwitch(el: HTMLElement): HTMLButtonElement {
-    return [...el.querySelectorAll('[role="switch"]')].find(
-      (b) => b.getAttribute("aria-label") === "Read checkout pages",
-    ) as HTMLButtonElement;
+    return el.querySelector('[data-consent-switch] [role="switch"]') as HTMLButtonElement;
   }
 
   it("shows the current OFF state, and clicking it writes checkoutReadingEnabled: true through ledger.writeSettings", async () => {
@@ -238,6 +274,46 @@ describe("PopupApp — the Settings consent toggle actually flips the stored val
     // RED if the click stops re-rendering the real, current value.
     const toggleAfter = findCheckoutReadingSwitch(el);
     expect(toggleAfter.getAttribute("aria-checked")).toBe("true");
+  });
+
+  // §1.12 case 5 -- the X2 guard, and it fails against the old
+  // `render()` -> `clear(container)` implementation: a keyboard user who
+  // toggles this switch must not lose focus to <body>.
+  it("clicking the switch does not lose focus -- document.activeElement is still the switch afterwards (X2)", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false } });
+    const el = root();
+    await createPopupApp(el, { store }).init();
+
+    (el.querySelector('[aria-label="Settings"]') as HTMLButtonElement).click();
+    await flush();
+
+    const toggle = findCheckoutReadingSwitch(el);
+    toggle.focus();
+    toggle.click();
+    await flush();
+
+    expect(document.activeElement).toBe(toggle);
+  });
+
+  // §1.12 case 6 -- a rejecting writeSettings must never move the switch:
+  // a consent control must never display a state that is not stored.
+  it("a rejected write leaves aria-checked unchanged and renders SETTINGS_TOGGLE_FAILED with role=alert", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false } });
+    const ledger = new PlanLedger(store);
+    vi.spyOn(ledger, "writeSettings").mockRejectedValueOnce(new Error("storage full"));
+    const el = root();
+    await createPopupApp(el, { store, ledger }).init();
+
+    (el.querySelector('[aria-label="Settings"]') as HTMLButtonElement).click();
+    await flush();
+
+    const toggle = findCheckoutReadingSwitch(el);
+    toggle.click();
+    await flush();
+
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    const alert = el.querySelector('[role="alert"]');
+    expect(alert?.textContent).toBe("That didn't save. Your browser storage may be full. Try again.");
   });
 
   it("shows the current ON state, and clicking it writes checkoutReadingEnabled: false -- revocation from Settings, not just deletion", async () => {
@@ -299,6 +375,109 @@ describe("PopupApp — manual entry writes to the ledger", () => {
     expect(plans).toHaveLength(1);
     expect(plans[0]?.source).toBe("manual");
     expect(plans[0]?.orderTotalCents).toBe(6000);
+  });
+});
+
+// §2 (first-run UX spec) -- getting out of the welcome tab. surface: "tab"
+// is the one flag (X1) that turns on the pin hint, the exit block, and the
+// tab-only done note; the toolbar popup surface never sets it.
+describe("PopupApp — surface-aware tab exit block (§2)", () => {
+  async function addPlanViaManualEntry(el: HTMLElement): Promise<void> {
+    const addBtn = [...el.querySelectorAll("button")].find((b) => b.textContent === "Add a plan") as HTMLButtonElement;
+    addBtn.click();
+    await flush();
+    (el.querySelector("#ppc-f-total") as HTMLInputElement).value = "$60.00";
+    (el.querySelector("#ppc-f-count") as HTMLInputElement).value = "4";
+    (el.querySelector("#ppc-f-cadence") as HTMLSelectElement).value = "MONTHLY";
+    (el.querySelector("#ppc-f-each") as HTMLInputElement).value = "$15.00";
+    (el.querySelector("form") as HTMLFormElement).dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flush();
+  }
+
+  it("surface: tab renders a Close this tab button; surface: popup renders none", async () => {
+    const tabEl = root();
+    await createPopupApp(tabEl, { store: createFakeStore({ settings: { checkoutReadingEnabled: false } }), surface: "tab" }).init();
+    expect([...tabEl.querySelectorAll("button")].some((b) => b.textContent === "Close this tab")).toBe(true);
+
+    const popupEl = root();
+    await createPopupApp(popupEl, { store: createFakeStore({ settings: { checkoutReadingEnabled: false } }) }).init();
+    expect([...popupEl.querySelectorAll("button")].some((b) => b.textContent === "Close this tab")).toBe(false);
+  });
+
+  it("clicking Close this tab calls the injected closeSurface exactly once", async () => {
+    const closeSurface = vi.fn();
+    const el = root();
+    await createPopupApp(el, { store: createFakeStore({ settings: { checkoutReadingEnabled: false } }), surface: "tab", closeSurface }).init();
+
+    const closeBtn = [...el.querySelectorAll("button")].find((b) => b.textContent === "Close this tab") as HTMLButtonElement;
+    closeBtn.click();
+
+    expect(closeSurface).toHaveBeenCalledTimes(1);
+  });
+
+  it("surface: tab renders TAB_DONE_NOTE; the popup hero does not", async () => {
+    const tabEl = root();
+    await createPopupApp(tabEl, { store: createFakeStore({ settings: { checkoutReadingEnabled: false } }) , surface: "tab" }).init();
+    expect(tabEl.textContent).toContain("You're set. This lives in your browser toolbar from now on.");
+
+    const popupEl = root();
+    await createPopupApp(popupEl, { store: createFakeStore({ settings: { checkoutReadingEnabled: false } }) }).init();
+    expect(popupEl.textContent).not.toContain("You're set. This lives in your browser toolbar from now on.");
+  });
+
+  it("after a successful manual add, the hero shows SAVED_STATUS on both surfaces, and focus moves to the status line", async () => {
+    for (const surface of ["popup", "tab"] as const) {
+      const el = root();
+      await createPopupApp(el, { store: createFakeStore({ settings: { checkoutReadingEnabled: false } }), surface, today: () => "2026-06-01" }).init();
+      await addPlanViaManualEntry(el);
+
+      const status = el.querySelector('[role="status"]');
+      expect(status?.textContent).toBe("Added. These dates are on your calendar now.");
+      expect(document.activeElement).toBe(status);
+    }
+  });
+
+  it("on the tab, post-add, Close this tab carries btn--primary and Add a plan carries btn--ghost; exactly one .btn--primary exists in every hero state on both surfaces", async () => {
+    for (const surface of ["popup", "tab"] as const) {
+      const el = root();
+      await createPopupApp(el, { store: createFakeStore({ settings: { checkoutReadingEnabled: false } }), surface, today: () => "2026-06-01" }).init();
+      expect(el.querySelectorAll(".btn--primary").length).toBe(1);
+
+      await addPlanViaManualEntry(el);
+      expect(el.querySelectorAll(".btn--primary").length).toBe(1);
+
+      if (surface === "tab") {
+        const closeBtn = [...el.querySelectorAll("button")].find((b) => b.textContent === "Close this tab");
+        const addBtn = [...el.querySelectorAll("button")].find((b) => b.textContent === "Add a plan");
+        expect(closeBtn?.className).toContain("btn--primary");
+        expect(addBtn?.className).toContain("btn--ghost");
+      }
+    }
+  });
+
+  it("justAdded does not survive a fresh createPopupApp(...).init() against the same store", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false } });
+    const el = root();
+    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+    await addPlanViaManualEntry(el);
+    expect(el.querySelector('[role="status"]')?.textContent).toBe("Added. These dates are on your calendar now.");
+
+    const el2 = root();
+    await createPopupApp(el2, { store, today: () => "2026-06-01" }).init();
+    expect(el2.querySelector('[role="status"]')).toBeNull();
+  });
+});
+
+describe("PopupApp — labelled Settings control (§3)", () => {
+  it("the hero header's Settings control exposes a visible text label, identical to its aria-label, with the glyph hidden from the accessible name", async () => {
+    const el = root();
+    await createPopupApp(el, { store: createFakeStore({ settings: { checkoutReadingEnabled: false } }) }).init();
+
+    const gear = el.querySelector('[aria-label="Settings"]') as HTMLButtonElement;
+    expect(gear.textContent).toContain("Settings");
+    expect(gear.getAttribute("aria-label")).toBe("Settings");
+    const glyph = gear.querySelector(".iconbtn__glyph");
+    expect(glyph?.getAttribute("aria-hidden")).toBe("true");
   });
 });
 

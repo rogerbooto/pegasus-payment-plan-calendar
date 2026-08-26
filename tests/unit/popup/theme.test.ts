@@ -75,39 +75,110 @@ describe("BUG 2 — popup design tokens resolve in a normal-document context", (
   });
 });
 
-describe("BUG 3 — the selected-state indicator reserves its box unconditionally (no phantom label shift)", () => {
-  const checkBody = ruleBody(POPUP_CSS, /\.btn__check\s*\{/);
-
-  it("the base .btn__check rule (unpressed state) reserves real width/height/margin, not display: none", () => {
-    expect(checkBody).not.toBeNull();
-    expect(checkBody).toMatch(/width:\s*13px/);
-    expect(checkBody).toMatch(/height:\s*13px/);
-    expect(checkBody).toMatch(/margin-right:\s*6px/);
-    // The old defect: `display: none` in the base rule removes the box
-    // (and its width/margin) entirely in the unpressed state, so toggling
-    // to the pressed rule's `display: inline-flex` re-adds 19px of width
-    // that wasn't there a moment before -- the exact "text jumps" bug.
-    expect(checkBody).not.toMatch(/display:\s*none/);
+// §3.5 (first-run UX spec) -- BUG 3's ".btn__check" rules (and the button
+// pair they belonged to) are gone entirely (§1); the Settings-discoverability
+// affordance replaces them below.
+describe("§3.5 — the labelled Settings control has a RESTING (not hover-only) affordance", () => {
+  it(".iconbtn--labeled declares a border/background outside any :hover block (D10's fix)", () => {
+    const restingBody = ruleBody(OVERLAY_CSS, /\.iconbtn--labeled\s*\{/);
+    expect(restingBody).not.toBeNull();
+    // A resting boundary: either an actual border colour or a fill,
+    // never `border: 1px solid transparent` alone (that would be the same
+    // invisible-until-hover affordance the spec rejects).
+    expect(restingBody).toMatch(/border-color:\s*var\(--control-line\)/);
+    expect(restingBody).toMatch(/background:\s*var\(--panel-alt\)/);
   });
 
-  it("the pressed-state rule toggles visibility only, never display/width/margin", () => {
-    const pressedBody = ruleBody(POPUP_CSS, /\.btn\[aria-pressed="true"\]\s+\.btn__check\s*\{/);
-    expect(pressedBody).not.toBeNull();
-    expect(pressedBody).toMatch(/visibility:\s*visible/);
-    expect(pressedBody).not.toMatch(/display/);
-    expect(pressedBody).not.toMatch(/width/);
-    expect(pressedBody).not.toMatch(/margin/);
+  it(".iconbtn still declares the 44x44 minimum target size (target-size regression guard)", () => {
+    const iconbtnBody = ruleBody(OVERLAY_CSS, /\.iconbtn\s*\{/);
+    expect(iconbtnBody).toMatch(/min-width:\s*44px/);
+    expect(iconbtnBody).toMatch(/min-height:\s*44px/);
   });
 
-  it("liveness — reverting to the old display:none/inline-flex pair is caught by the assertions above", () => {
-    const sabotagedCss = POPUP_CSS
-      .replace(/\.btn__check\s*\{[^}]*\}/, ".btn__check { display: none; width: 13px; height: 13px; margin-right: 6px; }")
-      .replace(
-        /\.btn\[aria-pressed="true"\]\s+\.btn__check\s*\{[^}]*\}/,
-        '.btn[aria-pressed="true"] .btn__check { display: inline-flex; }',
-      );
-    const sabotagedBase = ruleBody(sabotagedCss, /\.btn__check\s*\{/);
-    expect(sabotagedBase).toMatch(/display:\s*none/); // proves the sabotage actually landed
-    expect(checkBody).not.toMatch(/display:\s*none/); // proves the real file does not regress to it
+  it("the glyph span is a distinct rule from the resting rule (liveness -- the selectors do not collide)", () => {
+    const glyphBody = ruleBody(OVERLAY_CSS, /\.iconbtn__glyph\s*\{/);
+    expect(glyphBody).not.toBeNull();
+  });
+});
+
+// §4.10 case 1 (first-run UX spec) -- D4's regression guard. Only the
+// token fix ships in this build (the three-state manual override in §4 is
+// deferred); this still needs its own pinned test so a future edit cannot
+// silently drop the page-bg fix that resolved the founder's actual
+// complaint (a dark panel on a still-light page in both extension pages).
+describe("D4 — DARK_TOKENS declares --page-bg", () => {
+  it("DARK_TOKENS carries a --page-bg declaration", () => {
+    expect(DARK_TOKENS).toMatch(/--page-bg:\s*#[0-9a-fA-F]{3,6}/);
+  });
+
+  it("liveness — a DARK_TOKENS with --page-bg stripped is caught by the assertion above", () => {
+    const sabotaged = DARK_TOKENS.replace(/--page-bg:[^;]+;/, "");
+    expect(sabotaged).not.toMatch(/--page-bg:/);
+    expect(DARK_TOKENS).toMatch(/--page-bg:/);
+  });
+});
+
+// §5.6 cases 4-5 (first-run UX spec) -- the two CSS-only assertions from
+// the preview-behaviour spec. The DOM/behavioural cases (1, 2, 3, 6) live
+// in tests/unit/overlay/confirmation-sheet-preview.test.ts, a NEW file
+// rather than an edit to confirmation-sheet.test.ts (§5.5 requires that
+// file to stay unmodified).
+describe("§5.6 case 4 — .echo--empty reserves zero space", () => {
+  it("OVERLAY_CSS declares zero padding/margin/background for .echo--empty", () => {
+    const body = ruleBody(OVERLAY_CSS, /\.echo--empty\s*\{/);
+    expect(body).not.toBeNull();
+    expect(body).toMatch(/padding:\s*0\b/);
+    expect(body).toMatch(/margin:\s*0\b/);
+    expect(body).toMatch(/background:\s*none\b/);
+  });
+
+  it("liveness — a POPUP_CSS/OVERLAY_CSS with .echo--empty stripped is caught by the assertion above", () => {
+    const sabotaged = OVERLAY_CSS.replace(/\.echo--empty\s*\{[^}]*\}/, "");
+    expect(ruleBody(sabotaged, /\.echo--empty\s*\{/)).toBeNull();
+  });
+});
+
+describe("§5.6 case 5 — the form's submit row is pinned to the bottom of the scrolling panel body", () => {
+  it("OVERLAY_CSS declares position: sticky; bottom: 0 on .form__actions", () => {
+    const body = ruleBody(OVERLAY_CSS, /\.form__actions\s*\{/);
+    expect(body).not.toBeNull();
+    expect(body).toMatch(/position:\s*sticky/);
+    expect(body).toMatch(/bottom:\s*0\b/);
+  });
+
+  it("liveness — a .form__actions rule without position: sticky is caught by the assertion above", () => {
+    const sabotaged = OVERLAY_CSS.replace(/\.form__actions\s*\{[^}]*\}/, ".form__actions { bottom: 0; }");
+    const sabotagedBody = ruleBody(sabotaged, /\.form__actions\s*\{/);
+    expect(sabotagedBody).not.toMatch(/position:\s*sticky/);
+  });
+});
+
+// D5/D7, and the separately-diagnosed max-height leak (first-run UX spec
+// §6/§8, plus the bug report that shipped alongside it) -- width/height
+// regression guards on the two extension-page-only selectors.
+describe("D5/D7 — the popup/welcome-tab surfaces fit at 375px and never resize between screens", () => {
+  it(".popup-root .panel uses max-width: 100% (not 100vw, which ignores this document's own body padding)", () => {
+    const body = ruleBody(POPUP_CSS, /\.popup-root \.panel\s*\{/);
+    expect(body).not.toBeNull();
+    expect(body).toMatch(/max-width:\s*100%/);
+    expect(body).not.toMatch(/max-width:\s*100vw/);
+  });
+
+  it("the separately-diagnosed bug: .popup-root .panel scopes the overlay's floating-panel max-height back out (max-height: none)", () => {
+    const body = ruleBody(POPUP_CSS, /\.popup-root \.panel\s*\{/);
+    expect(body).toMatch(/max-height:\s*none/);
+  });
+
+  it("OVERLAY_CSS's own .panel max-height cap is untouched (the overlay must still not take over the checkout page)", () => {
+    const body = ruleBody(OVERLAY_CSS, /\.panel\s*\{/);
+    expect(body).toMatch(/max-height:\s*min\(72vh,\s*640px\)/);
+  });
+
+  it(".onboard defaults to 340px (matching the popup panel), and only .popup-root--tab widens it to 380px", () => {
+    const onboardBody = ruleBody(POPUP_CSS, /\.onboard\s*\{/);
+    expect(onboardBody).toMatch(/width:\s*340px/);
+    expect(onboardBody).toMatch(/max-width:\s*100%/);
+    const tabBody = ruleBody(POPUP_CSS, /\.popup-root--tab \.onboard\s*\{/);
+    expect(tabBody).toMatch(/width:\s*380px/);
   });
 });

@@ -13,7 +13,7 @@
  * rather than reimplementing onboarding a second time.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ONBOARD_PIN_HINT, ONBOARD_TURN_ON, ONBOARD_TITLE, INVITE_LEAVE_EMAIL, INVITE_BODY } from "../../../src/popup/copy";
+import { ONBOARD_PIN_HINT, ONBOARD_TITLE, INVITE_LEAVE_EMAIL, INVITE_BODY } from "../../../src/popup/copy";
 import { PlanLedger } from "../../../src/storage/ledger";
 import { chromeLocalStore } from "../../../src/storage/store";
 import { markViewedNext30 } from "../../../src/popup/usage-tracking";
@@ -62,7 +62,7 @@ describe("welcome entry point — mounts the real onboarding screen, with the pi
     document.head.querySelectorAll("style").forEach((s) => s.remove());
   });
 
-  it("renders the same onboarding screen the popup does, plus the pin hint the popup never shows", async () => {
+  it("renders the same onboarding screen the popup does (a role=switch consent control, §1), plus the pin hint the popup never shows", async () => {
     vi.resetModules();
     await import("../../../src/welcome/welcome");
     document.dispatchEvent(new Event("DOMContentLoaded"));
@@ -70,8 +70,25 @@ describe("welcome entry point — mounts the real onboarding screen, with the pi
 
     const root = document.getElementById("ppc-welcome-root");
     expect(root?.textContent).toContain(ONBOARD_TITLE);
-    expect(root?.textContent).toContain(ONBOARD_TURN_ON);
+    expect(root?.querySelectorAll('[role="switch"]').length).toBe(1);
+    expect(root?.querySelector('[role="switch"]')?.getAttribute("aria-checked")).toBe("false");
     expect(root?.textContent).toContain(ONBOARD_PIN_HINT);
+  });
+
+  // §2.9 case 1 -- X1: welcome.ts wires createPopupApp with
+  // { surface: "tab" }, which is what turns on the exit block on the hero
+  // screen this tab eventually reaches (not just the pin hint above).
+  it("wires createPopupApp with surface: tab, so its own hero screen (once reached) shows the tab-only exit block", async () => {
+    const ledger = new PlanLedger(chromeLocalStore);
+    await ledger.writeSettings({ checkoutReadingEnabled: false });
+
+    vi.resetModules();
+    await import("../../../src/welcome/welcome");
+    document.dispatchEvent(new Event("DOMContentLoaded"));
+    await flush();
+
+    const root = document.getElementById("ppc-welcome-root");
+    expect([...(root?.querySelectorAll("button") ?? [])].some((b) => b.textContent === "Close this tab")).toBe(true);
   });
 
   /**

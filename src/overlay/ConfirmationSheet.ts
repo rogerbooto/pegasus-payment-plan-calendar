@@ -200,16 +200,26 @@ function renderForm(opts: BuildFormOptions): void {
       ],
     }),);
 
+  // §5 R5 (first-run UX spec): the preview line and the arithmetic note
+  // are siblings in ONE container, always in this order -- inserted or
+  // removed only within it, so their combined appearance is one reflow
+  // (never two) and the note can never render above the preview depending
+  // on which recompute ran last.
+  const derived = el("div", { className: "form__derived" });
   const echo = el("p", {
-    className: "echo",
+    className: "echo echo--empty",
     attrs: { role: "status", "aria-live": "polite", "aria-atomic": "true" },
   });
-  form.appendChild(echo);
+  derived.appendChild(echo);
+  form.appendChild(derived);
 
   let arithmeticNote: HTMLParagraphElement | null = null;
   let errorNote: HTMLParagraphElement | null = null;
 
-  const actions = el("div", { className: "actions", attrs: { style: "margin-top:2px" } });
+  // §5 R4 / X6: was an inline `style="margin-top:2px"` attribute; the
+  // layout value (plus the sticky-to-the-scroll-container behaviour) now
+  // lives entirely in OVERLAY_CSS's `.form__actions` rule.
+  const actions = el("div", { className: "actions form__actions" });
   const submitBtn = el("button", { className: "btn btn--primary", attrs: { type: "submit" }, text: copy.FORM_SUBMIT });
   const cancelBtn = el("button", {
     className: "btn btn--ghost",
@@ -251,9 +261,15 @@ function renderForm(opts: BuildFormOptions): void {
       Number.isSafeInteger(count) && count >= INSTALLMENT_COUNT_MIN && count <= INSTALLMENT_COUNT_MAX;
 
     if (totalCents === null || eachCents === null || !validCount || !cadence || !/^\d{4}-\d{2}-\d{2}$/.test(first)) {
-      echo.appendChild(text(""));
+      // §5 R1/R3: nothing to preview. The node stays in the DOM (R2 --
+      // role="status" regions must exist before content is added to
+      // announce reliably) but reserves zero space: no reserved bar, no
+      // placeholder, no skeleton. `.echo--empty` is an explicit class this
+      // same function sets/clears, never a `:empty` selector (R3).
+      echo.classList.add("echo--empty");
       return;
     }
+    echo.classList.remove("echo--empty");
 
     const dates = paymentDates({
       id: "preview",
@@ -293,7 +309,11 @@ function renderForm(opts: BuildFormOptions): void {
           text("."),
         ],
       });
-      form.insertBefore(arithmeticNote, actions);
+      // §5 R5: appended into the SAME container as the preview line
+      // (never `form.insertBefore(arithmeticNote, actions)`, which used
+      // to give the note a separate insertion path of its own), always
+      // after it -- one shared home, one fixed order.
+      derived.appendChild(arithmeticNote);
     }
   }
 

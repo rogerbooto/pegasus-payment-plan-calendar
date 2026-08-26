@@ -16,6 +16,14 @@
  * a link-out (`window.open`/`chrome.tabs.create` to a static, developer-
  * authored URL) — there is no `<input type="email">` or any other field
  * anywhere in this module.
+ *
+ * X2/X3 (first-run UX spec): a state change INSIDE a screen (the Settings
+ * consent switch) updates itself in place and never calls `render()` --
+ * only navigation between screens (`go()`) does, and every navigation
+ * moves focus to the new screen's own heading, `h2.panel__title` or
+ * `h3#ppc-onboard-h` (carrying `tabindex="-1"`), except the two deliberate
+ * exceptions noted at their call sites below (manual entry keeps its own
+ * field focus; the post-add hero focuses the status line instead).
  */
 import type { PaymentPlanRecord } from "../shared/types";
 import { formatCents } from "../shared/format";
@@ -25,6 +33,7 @@ import { chromeLocalStore, type KeyValueStore } from "../storage/store";
 import { paymentDates } from "../impact/engine";
 import { renderManualEntrySheet } from "../overlay/ConfirmationSheet";
 import { renderToolbarVerification } from "../overlay/ToolbarVerification";
+import { buildConsentSwitchRow } from "./ConsentSwitch";
 import { el, clear, text } from "../overlay/dom";
 import { todayIsoDate } from "../overlay/format-helpers";
 import * as overlayCopy from "../overlay/copy";
@@ -43,16 +52,26 @@ export interface PopupAppDeps {
    */
   readonly marketingHostConfigured?: boolean;
   /**
-   * Set only by src/welcome/welcome.ts. Chrome does not pin a freshly
-   * installed extension's toolbar icon, and no extension API can force
-   * one — so a fresh install may have no other reachable route back to
-   * this onboarding screen than the welcome tab itself. When true, the
-   * onboarding screen adds one plain line telling the user where the icon
-   * lives. The toolbar popup itself never sets this: a user already
-   * looking at the toolbar popup has, by definition, already found the
-   * icon.
+   * X1 (first-run UX spec): one flag, not two. Replaces the former
+   * `showPinHint: boolean`. Defaults to "popup" -- the surface that opens
+   * from the browser's own toolbar icon and closes the moment it loses
+   * focus. src/welcome/welcome.ts passes `"tab"`: the first-run welcome
+   * tab, opened once on install because Chrome does not pin a fresh
+   * install's icon (and no extension API can force that pin) -- a tab
+   * does NOT close on blur, so it needs its own exit affordance (§2) and
+   * shows the pin-location hint the popup never needs.
    */
-  readonly showPinHint?: boolean;
+  readonly surface?: "popup" | "tab";
+  /**
+   * Testing-only override for the tab-surface "Close this tab" control
+   * (§2.6). Real callers never pass this. The default sequence --
+   * `chrome.tabs.getCurrent()` then `chrome.tabs.remove(tab.id)`, falling
+   * back to `window.close()` -- needs no manifest permission: the "tabs"
+   * permission only gates `url`/`pendingUrl`/`title`/`favIconUrl` on
+   * `tabs.query()`, not the namespace itself (the same reasoning
+   * service-worker.ts already relies on for `chrome.tabs.create`).
+   */
+  readonly closeSurface?: () => void;
 }
 
 type Screen = "hero" | "settings" | "verify" | "onboard" | "manual";
@@ -80,6 +99,34 @@ function next30Total(plans: readonly PaymentPlanRecord[], today: string): { tota
   return { totalCents, count };
 }
 
+/** Moves focus to a screen's own heading on navigation (X3), giving it
+ * `tabindex="-1"` so it is programmatically focusable without joining the
+ * tab order. Pointer users never see a focus ring here -- the existing
+ * global `:focus-visible` rule already suppresses that for mouse/touch
+ * activation, so this deliberately does not set `outline: none`. */
+function moveFocusToHeading(root: HTMLElement, selector: string): void {
+  const heading = root.querySelector(selector) as HTMLElement | null;
+  if (!heading) return;
+  heading.setAttribute("tabindex", "-1");
+  heading.focus();
+}
+
+function defaultCloseSurface(): void {
+  const w = typeof window !== "undefined" ? window : undefined;
+  if (typeof chrome !== "undefined" && chrome.tabs?.getCurrent && chrome.tabs?.remove) {
+    void chrome.tabs
+      .getCurrent()
+      .then((tab) => {
+        if (tab?.id !== undefined) return chrome.tabs.remove(tab.id);
+        w?.close();
+        return undefined;
+      })
+      .catch(() => w?.close());
+    return;
+  }
+  w?.close();
+}
+
 export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) {
   const store = deps.store ?? chromeLocalStore;
   const ledger = deps.ledger ?? new PlanLedger(store);
@@ -94,16 +141,26 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
       }
     });
   const marketingHostConfigured = deps.marketingHostConfigured ?? copy.MARKETING_HOST_CONFIGURED;
-  const showPinHint = deps.showPinHint ?? false;
+  const surface = deps.surface ?? "popup";
+  const closeSurface = deps.closeSurface ?? defaultCloseSurface;
 
   let screen: Screen = "hero";
+  /**
+   * §2.4 -- transient, in-memory only. Set by the manual-entry `onConfirm`
+   * handler below, consumed (and cleared) by the very next hero render.
+   * Never touches storage: re-opening the popup later, or a fresh
+   * `createPopupApp(...).init()` against the same store, must not
+   * re-announce an old add.
+   */
+  let justAdded = false;
 
   async function render(): Promise<void> {
     clear(container);
-    container.className = "popup-root";
+    container.className = surface === "tab" ? "popup-root popup-root--tab" : "popup-root";
 
     if (screen === "onboard") {
       await renderOnboard();
+      moveFocusToHeading(container, "#ppc-onboard-h");
       return;
     }
 
@@ -112,11 +169,13 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
 
     if (screen === "verify") {
       renderToolbarVerification(panel, { onBack: () => go("settings") });
+      moveFocusToHeading(container, ".panel__title");
       return;
     }
 
     if (screen === "settings") {
       await renderSettings(panel);
+      moveFocusToHeading(container, ".panel__title");
       return;
     }
 
@@ -129,12 +188,16 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
       renderManualEntrySheet(body, {
         onConfirm: async (record) => {
           await ledger.addPlan(record);
+          justAdded = true;
           go("hero");
         },
         onCancel: () => go("hero"),
       });
       panel.appendChild(head);
       panel.appendChild(body);
+      // X3 exception: renderManualEntrySheet (ConfirmationSheet.ts)
+      // already moved focus to the order-total field. Stealing it back to
+      // the heading here would undo that deliberate, documented exception.
       return;
     }
 
@@ -147,9 +210,12 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
       children: [
         el("h2", { className: "panel__title", attrs: { id: "ppc-popup-title" }, text: overlayCopy.PANEL_TITLE }),
         el("button", {
-          className: "iconbtn",
+          className: "iconbtn iconbtn--labeled",
           attrs: { type: "button", "aria-label": copy.POPUP_SETTINGS_LABEL },
-          text: "⚙",
+          children: [
+            el("span", { className: "iconbtn__glyph", attrs: { "aria-hidden": "true" }, text: "⚙" }),
+            el("span", { className: "iconbtn__label", text: copy.POPUP_SETTINGS_LABEL }),
+          ],
           on: { click: () => go("settings") },
         }),
       ],
@@ -157,6 +223,23 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
 
     const plans = await ledger.listPlans();
     const body = el("div", { className: "panel__body" });
+
+    // §2.4 S3 -- consumed exactly once: this render shows it, and it is
+    // cleared before the function returns, so no later render (a Settings
+    // round-trip, a fresh popup open, a fresh init() against the same
+    // store) can ever show a stale "Added." from an earlier session.
+    const showJustAdded = justAdded;
+    justAdded = false;
+
+    let statusEl: HTMLElement | null = null;
+    if (showJustAdded) {
+      statusEl = el("p", {
+        className: "status",
+        attrs: { role: "status", tabindex: "-1" },
+        text: overlayCopy.SAVED_STATUS,
+      });
+      body.appendChild(statusEl);
+    }
 
     if (plans.length < 1) {
       body.appendChild(el("p", { className: "plain", text: overlayCopy.POPUP_EMPTY_LEDGER }));
@@ -170,18 +253,43 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
         }),);
     }
 
-    body.appendChild(
-      el("div", {
-        className: "actions",
-        children: [
-          el("button", {
-            className: "btn btn--primary",
-            attrs: { type: "button" },
-            text: overlayCopy.ACTION_ADD,
-            on: { click: () => go("manual") },
-          }),
-        ],
-      }),);
+    // §2.2/§2.5 -- tab-only, on every hero state, directly above the
+    // actions row it explains. Never on the popup (S1/X1): a user already
+    // looking at the toolbar popup has, by definition, already found the
+    // icon, and closing it is just clicking away.
+    if (surface === "tab") {
+      body.appendChild(el("p", { className: "hero__donenote", text: copy.TAB_DONE_NOTE }));
+    }
+
+    const addBtn = el("button", {
+      className: surface === "tab" && showJustAdded ? "btn btn--ghost" : "btn btn--primary",
+      attrs: { type: "button" },
+      text: overlayCopy.ACTION_ADD,
+      on: { click: () => go("manual") },
+    });
+
+    const actionChildren: HTMLElement[] = [];
+    if (surface === "tab") {
+      const closeBtn = el("button", {
+        className: showJustAdded ? "btn btn--primary" : "btn btn--ghost",
+        attrs: { type: "button" },
+        text: copy.CLOSE_TAB_LABEL,
+        on: { click: () => closeSurface() },
+      });
+      // §2.5/S4 -- exactly one .btn--primary in every state: before an
+      // add, [Add a plan] leads and is primary; the moment one is added,
+      // the emphasis (and the DOM order) flips to [Close this tab] first
+      // -- a deterministic reshuffle paired with the focus move above,
+      // never a silent one.
+      if (showJustAdded) {
+        actionChildren.push(closeBtn, addBtn);
+      } else {
+        actionChildren.push(addBtn, closeBtn);
+      }
+    } else {
+      actionChildren.push(addBtn);
+    }
+    body.appendChild(el("div", { className: "actions", children: actionChildren }));
 
     const usage = await readUsageFlags(store);
     if (plans.length >= 1 && usage.viewedNext30 && !usage.inviteDismissed && marketingHostConfigured) {
@@ -200,6 +308,18 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
     panel.appendChild(head);
     panel.appendChild(body);
     panel.appendChild(foot);
+
+    // X3 exception: the post-add hero focuses the status line, not the
+    // heading -- it is inserted during this same render, so a role="status"
+    // region cannot be relied on alone to announce it (live regions must
+    // pre-exist to fire reliably in every engine). Moving focus there
+    // guarantees it is read, immediately before the actions row whose
+    // emphasis just changed.
+    if (showJustAdded && statusEl) {
+      statusEl.focus();
+    } else {
+      moveFocusToHeading(container, ".panel__title");
+    }
   }
 
   function buildInvite(): HTMLDivElement {
@@ -258,57 +378,69 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
     const settings = await ledger.readSettings();
     const checkoutReadingEnabled = settings?.checkoutReadingEnabled ?? false;
 
-    const checkoutReadingRow = el("div", {
-      className: "popup__row",
-      children: [
-        el("div", {
-          className: "popup__row-text",
-          children: [
-            el("div", { text: copy.SETTINGS_CHECKOUT_READING_LABEL }),
-            el("div", { className: "popup__row-desc", text: copy.SETTINGS_CHECKOUT_READING_DESC }),
-          ],
-        }),
-        el("button", {
-          className: "switchbtn",
-          attrs: {
-            type: "button",
-            role: "switch",
-            "aria-checked": String(checkoutReadingEnabled),
-            "aria-label": copy.SETTINGS_CHECKOUT_READING_LABEL,
-          },
-          children: [
-            el("span", {
-              className: checkoutReadingEnabled ? "switch" : "switch switch--off",
-              attrs: { "aria-hidden": "true" },
-            }),
-          ],
-          on: {
-            click: () =>
-              void ledger.writeSettings({ checkoutReadingEnabled: !checkoutReadingEnabled }).then(render),
-          },
-        }),
-      ],
+    // §1.6/X2 -- pessimistic: write first, reflect only once the write
+    // resolves. `pending` blocks a second click mid-flight without ever
+    // disabling the button (a disabled button cannot hold focus, which
+    // would reintroduce D2/D9 on every toggle). `errorSlot` is a stable
+    // node this closure owns for the lifetime of this screen -- it is
+    // never touched by a full re-render, only by this handler.
+    let pending = false;
+    const errorSlot = el("div", {});
+
+    // A mutable-property holder (never itself reassigned) rather than a
+    // `let` rebound after construction: `onToggle` below is captured by
+    // the switch's own click handler at construction time and only ever
+    // fires later (after `handle.current` is populated), so this is not
+    // a real temporal-dead-zone hazard -- it just keeps the binding
+    // itself a `const`.
+    const handle: { current?: ReturnType<typeof buildConsentSwitchRow> } = {};
+    handle.current = buildConsentSwitchRow({
+      idPrefix: "ppc-settings-consent",
+      checked: checkoutReadingEnabled,
+      // Settings shows the static description regardless of state --
+      // unlike the first-run screen, there is no "before you decide"
+      // framing left to state here.
+      descriptionFor: () => copy.SETTINGS_CHECKOUT_READING_DESC,
+      onToggle: (next) => {
+        if (pending) return;
+        pending = true;
+        void ledger
+          .writeSettings({ checkoutReadingEnabled: next })
+          .then(() => {
+            pending = false;
+            clear(errorSlot);
+            handle.current?.setChecked(next);
+          })
+          .catch(() => {
+            pending = false;
+            // Reverts to the pre-click value: setChecked() above is only
+            // ever called on a SUCCESSFUL write, so a rejected write
+            // never leaves the switch showing anything storage doesn't
+            // actually hold.
+            clear(errorSlot);
+            errorSlot.appendChild(
+              el("p", { className: "note", attrs: { role: "alert" }, text: copy.SETTINGS_TOGGLE_FAILED }),);
+          });
+      },
     });
 
-    const dataGroup = el("div", {
-      className: "settings__group",
-      children: [
-        el("div", { className: "settings__h", text: copy.SETTINGS_GROUP_DATA }),
-        checkoutReadingRow,
-        el("p", { className: "settings__note", text: copy.SETTINGS_DATA_NOTE }),
-        el("div", {
-          className: "actions",
-          children: [
-            el("button", {
-              className: "btn btn--ghost btn--sm",
-              attrs: { type: "button" },
-              text: copy.SETTINGS_DELETE_ALL,
-              on: { click: () => void deleteAllData().then(render) },
-            }),
-          ],
-        }),
-      ],
-    });
+    const dataGroup = el("div", { className: "settings__group" });
+    dataGroup.appendChild(el("div", { className: "settings__h", text: copy.SETTINGS_GROUP_DATA }));
+    dataGroup.appendChild(handle.current.row);
+    dataGroup.appendChild(errorSlot);
+    dataGroup.appendChild(el("p", { className: "settings__note", text: copy.SETTINGS_DATA_NOTE }));
+    dataGroup.appendChild(
+      el("div", {
+        className: "actions",
+        children: [
+          el("button", {
+            className: "btn btn--ghost btn--sm",
+            attrs: { type: "button" },
+            text: copy.SETTINGS_DELETE_ALL,
+            on: { click: () => void deleteAllData().then(render) },
+          }),
+        ],
+      }),);
     body.appendChild(dataGroup);
 
     const aboutGroup = el("div", {
@@ -354,58 +486,35 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
     section.appendChild(el("h3", { attrs: { id: "ppc-onboard-h" }, text: copy.ONBOARD_TITLE }));
     section.appendChild(el("p", { text: copy.ONBOARD_BODY }));
 
-    // The real "pick one" pair: the chosen state is tracked here and is
-    // the ONE thing Continue below persists as checkoutReadingEnabled
-    // (storage/ledger.ts). `choice` starts at `null` -- "nothing picked
-    // yet" is a distinct state from either button, and Continue must not
-    // treat it as an implicit "yes" (see the click handler below for the
-    // Continue-without-choosing default).
-    let choice: boolean | null = null;
+    // §1.3/§1.6 -- local UI state only. Nothing here is written until
+    // Continue is pressed below (§1.4): `settings === null` is the
+    // has-onboarded sentinel elsewhere in this file, and an immediate
+    // write on this screen (as Settings' own toggle does) would mark
+    // onboarding complete the moment the switch is brushed, before the
+    // user has finished reading ONBOARD_BODY. Always starts OFF -- never
+    // pre-set to on, never a third visual state (§1.3).
+    let localChecked = false;
+    const handle: { current?: ReturnType<typeof buildConsentSwitchRow> } = {};
+    handle.current = buildConsentSwitchRow({
+      idPrefix: "ppc-onboard-consent",
+      checked: false,
+      descriptionFor: (checked) => (checked ? copy.ONBOARD_CONSENT_STATE_ON : copy.ONBOARD_CONSENT_STATE_OFF),
+      onToggle: (next) => {
+        localChecked = next;
+        handle.current?.setChecked(next);
+      },
+    });
+    section.appendChild(handle.current.row);
 
-    const turnOnBtn = el("button", {
-      className: "btn btn--primary",
-      attrs: { type: "button", "aria-pressed": "false" },
-      children: [
-        el("span", {
-          className: "btn__check",
-          attrs: { "aria-hidden": "true" },
-          text: "✓",
-        }),
-        text(copy.ONBOARD_TURN_ON),
-      ],
-    });
-    const noThanksBtn = el("button", {
-      className: "btn btn--ghost",
-      attrs: { type: "button", "aria-pressed": "false" },
-      children: [
-        el("span", {
-          className: "btn__check",
-          attrs: { "aria-hidden": "true" },
-          text: "✓",
-        }),
-        text(copy.ONBOARD_NO_THANKS),
-      ],
-    });
-    turnOnBtn.addEventListener("click", () => {
-      choice = true;
-      turnOnBtn.setAttribute("aria-pressed", "true");
-      noThanksBtn.setAttribute("aria-pressed", "false");
-    });
-    noThanksBtn.addEventListener("click", () => {
-      choice = false;
-      noThanksBtn.setAttribute("aria-pressed", "true");
-      turnOnBtn.setAttribute("aria-pressed", "false");
-    });
-    section.appendChild(el("div", { className: "actions", attrs: { "data-consent-pair": "" }, children: [turnOnBtn, noThanksBtn] }));
     section.appendChild(el("p", { className: "onboard__skipnote", text: copy.ONBOARD_SKIP_NOTE }));
-    if (showPinHint) {
+    section.appendChild(el("p", { className: "onboard__skipnote", text: copy.ONBOARD_SAVE_NOTE }));
+    if (surface === "tab") {
       section.appendChild(el("p", { className: "onboard__skipnote", text: copy.ONBOARD_PIN_HINT }));
     }
 
     section.appendChild(
       el("div", {
-        className: "actions",
-        attrs: { style: "margin-top:22px" },
+        className: "actions onboard__actions",
         children: [
           el("button", {
             className: "btn btn--primary",
@@ -413,13 +522,11 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
             text: copy.ONBOARD_CONTINUE,
             on: {
               click: () => {
-                // Continue persists whichever of the pair was chosen.
-                // Continue-without-choosing (choice still `null`) is
-                // treated as "No thanks", not as "Turn this on" -- the
-                // safe default is NOT reading checkout pages, made
-                // explicit here rather than left to fall out of whatever
-                // `Boolean(null)` happens to coerce to.
-                const checkoutReadingEnabled = choice === true;
+                // Continue performs the single writeSettings call (§1.4).
+                // Continue-without-touching-the-switch persists `false` --
+                // the same safe, not-reading default the switch itself
+                // was already showing, never an implicit "yes".
+                const checkoutReadingEnabled = localChecked;
                 void ledger.writeSettings({ checkoutReadingEnabled }).then(() => go("hero"));
               },
             },

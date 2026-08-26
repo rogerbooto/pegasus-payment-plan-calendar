@@ -340,14 +340,35 @@ async function collectAllRenderedCopy(): Promise<string[]> {
     void app;
   }
   // --- src/welcome/welcome.ts mounts this exact same onboarding screen
-  // with showPinHint: true (the one extra line, ONBOARD_PIN_HINT, telling
-  // a fresh install where the toolbar icon lives) -- covered here rather
+  // with surface: "tab" (the one extra line, ONBOARD_PIN_HINT, telling a
+  // fresh install where the toolbar icon lives) -- covered here rather
   // than in a second, duplicated copy-compliance file for that surface.
   {
     const store = memoryStore();
     const root = document.createElement("div");
     document.body.appendChild(root);
-    await createPopupApp(root, { store, showPinHint: true }).init();
+    await createPopupApp(root, { store, surface: "tab" }).init();
+    collected.push(...collectUserFacingStrings(root));
+  }
+  // --- the tab-surface hero (§2): the exit block (TAB_DONE_NOTE, "Close
+  // this tab") and, once a plan is added, the post-add SAVED_STATUS line
+  // -- neither of which the popup-surface hero above ever renders.
+  {
+    const store = memoryStore({ settings: { checkoutReadingEnabled: false } });
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    await createPopupApp(root, { store, surface: "tab", today: () => "2026-06-01" }).init();
+    collected.push(...collectUserFacingStrings(root));
+
+    const addBtn = [...root.querySelectorAll("button")].find((b) => b.textContent === "Add a plan") as HTMLButtonElement | undefined;
+    addBtn?.click();
+    await flush();
+    (root.querySelector("#ppc-f-total") as HTMLInputElement).value = "$60.00";
+    (root.querySelector("#ppc-f-count") as HTMLInputElement).value = "4";
+    (root.querySelector("#ppc-f-cadence") as HTMLSelectElement).value = "MONTHLY";
+    (root.querySelector("#ppc-f-each") as HTMLInputElement).value = "$15.00";
+    (root.querySelector("form") as HTMLFormElement)?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flush();
     collected.push(...collectUserFacingStrings(root));
   }
   {

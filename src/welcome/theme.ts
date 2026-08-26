@@ -13,4 +13,11 @@ body {
   justify-content: center;
   padding: 24px;
 }
+/* D5 (first-run UX spec, §6): narrower body padding at narrow viewports,
+   alongside the .onboard/.panel max-width: 100% fix in popup/theme.ts --
+   together they keep the panel inside the viewport at 375px with no
+   horizontal scrollbar. */
+@media (max-width: 420px) {
+  body { padding: 16px; }
+}
 `;
