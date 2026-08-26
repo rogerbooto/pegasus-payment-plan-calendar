@@ -83,6 +83,11 @@ out
 dist
 .output
 
+# Local fixture-testing build output (npm run build:dev) -- structurally
+# separate from dist/, the shipping build. See scripts/build-dev.mjs and
+# CONTRIBUTING.md.
+dist-dev
+
 # Gatsby files
 .cache/
 # Comment in the public line in if your project uses Gatsby and not Next.js

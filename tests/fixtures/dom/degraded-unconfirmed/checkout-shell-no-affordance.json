@@ -1,0 +1,5 @@
+{
+  "describes": "a plausible checkout page (order summary, a Total line, a disabled Continue button) with zero payment-affordance markup: no [role=radiogroup], no input[type=radio][name*=payment], no payment-method form, no Stripe iframe -- so cheapPreGate stays false even though the URL path looks like a checkout. looksLikeCheckoutPath (the weaker, path-only signal) still fires, so the session is never silently dormant: it reports one one-shot DEGRADED('unconfirmed') and attaches no observer. This is also the fixture served live at /checkout/still-loading by scripts/dev/serve-fixtures.mjs -- see CONTRIBUTING.md.",
+  "expectedCheapPreGate": false,
+  "expectedLooksLikeCheckoutPath": true
+}

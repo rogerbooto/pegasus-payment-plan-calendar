@@ -1,5 +1,13 @@
-// Release-blocking guard: fails loudly if the built extension bundle still
-// contains the MARKETING_HOST `.invalid` placeholder (src/popup/copy.ts).
+// Release-blocking guard. Two independent checks against the BUILT OUTPUT
+// in dist/, composed here:
+//
+//   1. The MARKETING_HOST `.invalid` placeholder (src/popup/copy.ts) must
+//      not still be in the built bundle.
+//   2. No dev-only host (localhost / loopback -- see
+//      scripts/lib/dev-host-guard.mjs) may appear in the built manifest or
+//      any built bundle. That host only ever has meaning on the local
+//      fixture-testing build (`npm run build:dev`, dist-dev/, never
+//      dist/) -- see scripts/lib/dev-build.mjs and CONTRIBUTING.md.
 //
 // Deliberately NOT wired into `npm run build` or `npm run check`. Those run
 // on every local dev loop and every CI push, and the placeholder is the
@@ -13,16 +21,17 @@
 // npm script precisely so it can't be forgotten -- it shows up next to
 // `build`/`check` in `npm run`, not buried in a one-off shell command).
 //
-// This checks the BUILT OUTPUT in dist/, not the source constant directly:
-// a future refactor could rename or relocate MARKETING_HOST, but what must
-// never ship is the literal `.invalid` placeholder text, wherever it ends
-// up. dist/ is gitignored and not assumed to exist or be fresh -- callers
-// run `npm run build` first (release-check's own package.json entry does
-// this via `&&`), and a missing or empty dist/ fails loudly here rather
-// than silently reporting "clean" on nothing.
+// This checks the BUILT OUTPUT in dist/, not source constants directly:
+// a future refactor could rename or relocate either signal, but what must
+// never ship is the literal placeholder text / dev-only host, wherever it
+// ends up. dist/ is gitignored and not assumed to exist or be fresh --
+// callers run `npm run build` first (release-check's own package.json
+// entry does this via `&&`), and a missing or empty dist/ fails loudly
+// here rather than silently reporting "clean" on nothing.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { formatGuardFailureMessage, scanForUnconfiguredMarketingHost } from "./lib/marketing-host-guard.mjs";
+import { formatDevHostGuardFailureMessage, scanForDevOnlyHosts } from "./lib/dev-host-guard.mjs";
 
 const DIST_DIR = join(process.cwd(), "dist");
 
@@ -37,16 +46,30 @@ if (jsFiles.length === 0) {
   process.exit(1);
 }
 
-const files = jsFiles.map((name) => ({
+const jsFileEntries = jsFiles.map((name) => ({
   path: join("dist", name),
   text: readFileSync(join(DIST_DIR, name), "utf-8"),
 }));
 
-const hits = scanForUnconfiguredMarketingHost(files);
-
-if (hits.length > 0) {
-  console.error(formatGuardFailureMessage(hits));
+const marketingHostHits = scanForUnconfiguredMarketingHost(jsFileEntries);
+if (marketingHostHits.length > 0) {
+  console.error(formatGuardFailureMessage(marketingHostHits));
   process.exit(1);
 }
 
-console.log("release-check: no unconfigured marketing-host placeholder found in dist/. Clear to release.");
+// The dev-only-host guard also scans the built manifest, not just the JS
+// bundles: dist/manifest.json is the one file that would actually carry
+// the extra host_permissions/content_scripts.matches entry if a dev build
+// were mistaken for a shipping one (see scripts/lib/dev-build.mjs).
+const MANIFEST_PATH = join(DIST_DIR, "manifest.json");
+const manifestEntries = existsSync(MANIFEST_PATH)
+  ? [{ path: join("dist", "manifest.json"), text: readFileSync(MANIFEST_PATH, "utf-8") }]
+  : [];
+
+const devHostHits = scanForDevOnlyHosts([...manifestEntries, ...jsFileEntries]);
+if (devHostHits.length > 0) {
+  console.error(formatDevHostGuardFailureMessage(devHostHits));
+  process.exit(1);
+}
+
+console.log("release-check: no unconfigured marketing-host placeholder and no dev-only host found in dist/. Clear to release.");

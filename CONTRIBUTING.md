@@ -50,6 +50,76 @@ npm run check     # typecheck, lint, tests, build
 
 `npm run build` produces a loadable unpacked extension in `dist/`.
 
+## Testing against a real browser
+
+The unit tests run every parsing and extraction path against static HTML
+fixtures (`tests/fixtures/dom/`), but a real checkout only ever runs inside
+a real page, loaded by a real browser, through the manifest's actual
+permissions. The shipped extension only has permission to run on the
+handful of real checkout hosts it recognizes, so exercising it against
+anything else — without visiting a real store — needs a second, local-only
+build.
+
+**Serve the fixtures:**
+
+```
+npm run serve:fixtures
+```
+
+This starts a small local server (no new dependency — just Node's own
+`http`/`fs`) on port 80 by default, serving a handful of the same fixture
+pages the unit tests already assert against (`tests/fixtures/dom/`,
+routed by `scripts/dev/fixture-routes.mjs`). Port 80 usually needs
+`sudo npm run serve:fixtures`, or a one-time
+`sudo setcap 'cap_net_bind_service=+ep' $(which node)`. If you'd rather
+not, set `PPC_FIXTURE_PORT` to any other port — every fixture works
+there except the first one below, which needs port 80 specifically (its
+own comment in `scripts/dev/serve-fixtures.mjs` explains why).
+
+**Build the local-fixtures variant:**
+
+```
+npm run build:dev
+```
+
+This writes to `dist-dev/`, never to `dist/`. It is the ordinary build
+(`scripts/build.mjs`) plus exactly one addition: permission to run on
+`localhost`, derived from the real `src/manifest.json` and
+`src/config/adapters.config.json` at build time
+(`scripts/lib/dev-build.mjs`) — there is no separate, hand-maintained dev
+manifest to fall out of sync with the real one. `src/manifest.json` itself
+is never edited.
+
+**Load it:** open `chrome://extensions`, enable Developer mode, "Load
+unpacked", and select `dist-dev/`. Its name and toolbar tooltip both say
+"(dev)" so it's never confused with a real install at a glance. With the
+fixture server running, visit the pages it lists at `http://localhost/`
+(or `http://localhost:<port>/` if you set `PPC_FIXTURE_PORT`).
+
+What each fixture shows:
+
+| Fixture | What it exercises |
+|---|---|
+| Full installment offer | The path that matters most and has never run in a real browser before: detection, the confirmation sheet with all four numbers pre-filled, and the calendar, end to end. |
+| Degraded / unconfirmed | A checkout-shaped page with nothing to confirm yet — the panel says so plainly instead of staying silent. |
+| Amazon-shaped totals | The Items / Shipping / tax breakdown that motivated the order-total suggestion — open "Add a plan" to see it offered back to you. |
+| Two disagreeing totals | Two different totals on the page — the suggestion stays blank, never a guess. |
+| French locale | A French total label, still recognized. |
+| Non-checkout page on a checkout-ish path | Confirms nothing inappropriate appears just because a URL looks like a checkout. |
+
+**This build must never be published.** It carries a permission the real
+extension does not, and does not need, and every one of the following
+exists specifically so it can't leave this laptop by accident:
+
+- `dist-dev/` is git-ignored, and is a completely separate directory from
+  `dist/` — nothing here ever writes to, or reads from, `dist/`.
+- `npm run release-check` (below) fails loudly if a `localhost` permission
+  (or a handful of other local-only addresses) ever turns up in a built
+  `dist/manifest.json` or bundle — see `scripts/lib/dev-host-guard.mjs`.
+- `npm run build` (the real build) is completely unaffected by any of
+  this: it is byte-for-byte the same output whether or not `npm run
+  build:dev` has ever been run.
+
 ## Before a release
 
 ```
@@ -61,9 +131,10 @@ This is separate from `npm run check` on purpose. One known placeholder
 deliberate, reserved, non-resolving address during ordinary development —
 `npm run build` and `npm run check` are meant to keep passing with it in
 place. `npm run release-check` builds the extension and then checks the
-*built* files for that placeholder, and fails loudly, naming the exact
-constant and file to fix, if it's still there. Run it before packaging
-anything for the Chrome Web Store.
+*built* files for that placeholder — and, separately, for the local-only
+`localhost` permission described above — and fails loudly, naming the
+exact cause, if either is still there. Run it before packaging anything
+for the Chrome Web Store.
 
 ## Licensing
 
