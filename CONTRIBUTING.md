@@ -67,14 +67,31 @@ npm run serve:fixtures
 ```
 
 This starts a small local server (no new dependency — just Node's own
-`http`/`fs`) on port 80 by default, serving a handful of the same fixture
-pages the unit tests already assert against (`tests/fixtures/dom/`,
-routed by `scripts/dev/fixture-routes.mjs`). Port 80 usually needs
-`sudo npm run serve:fixtures`, or a one-time
-`sudo setcap 'cap_net_bind_service=+ep' $(which node)`. If you'd rather
-not, set `PPC_FIXTURE_PORT` to any other port — every fixture works
-there except the first one below, which needs port 80 specifically (its
-own comment in `scripts/dev/serve-fixtures.mjs` explains why).
+`http`/`fs`) on port 8080 by default, serving a handful of the same
+fixture pages the unit tests already assert against
+(`tests/fixtures/dom/`, routed by `scripts/dev/fixture-routes.mjs`). No
+elevated privileges needed — every fixture works there, including the
+first one below, *as an ordinary page*.
+
+The one exception is what the first fixture below needs to reach its
+fullest state. The panel matches that page through the real
+shopify-checkout adapter code, which compares the page's host against a
+short allowlist — and a browser only reports a bare `localhost` (no
+`:<port>`) at port 80 specifically. So:
+
+- At the default port 8080, the first fixture still loads, and the panel
+  still runs the generic, path-based detection over it — everything
+  except the adapter match itself.
+- To see it matched through the real adapter code, serve on port 80
+  instead: `PPC_FIXTURE_PORT=80 npm run build:dev` and
+  `sudo PPC_FIXTURE_PORT=80 npm run serve:fixtures` (or a one-time
+  `sudo setcap 'cap_net_bind_service=+ep' $(which node)`, after which
+  plain `PPC_FIXTURE_PORT=80 npm run serve:fixtures` works without
+  `sudo`).
+
+Set `PPC_FIXTURE_PORT` before *both* `npm run build:dev` and
+`npm run serve:fixtures` — they read the same default, and the server
+warns loudly if it notices they were given different values.
 
 **Build the local-fixtures variant:**
 
@@ -93,8 +110,9 @@ is never edited.
 **Load it:** open `chrome://extensions`, enable Developer mode, "Load
 unpacked", and select `dist-dev/`. Its name and toolbar tooltip both say
 "(dev)" so it's never confused with a real install at a glance. With the
-fixture server running, visit the pages it lists at `http://localhost/`
-(or `http://localhost:<port>/` if you set `PPC_FIXTURE_PORT`).
+fixture server running, visit the pages it lists at
+`http://localhost:8080/` (or whatever port you set `PPC_FIXTURE_PORT`
+to — the server prints the exact links on startup).
 
 What each fixture shows:
 

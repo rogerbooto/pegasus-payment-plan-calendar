@@ -10,33 +10,42 @@
 //
 //   npm run serve:fixtures
 //
-// Binds port 80 by default, which usually needs elevated privileges on
-// Linux/macOS (`sudo npm run serve:fixtures`, or a one-time
-// `sudo setcap 'cap_net_bind_service=+ep' $(which node)`). This is
-// deliberate, not an oversight: the primary fixture (the full installment
-// offer, matched through the real shopify-checkout adapter code -- see
-// scripts/lib/dev-build.mjs) is matched by comparing the browser's own
-// `location.host` against a bare "localhost" entry in the dev-only
-// adapter config, with NO port-stripping logic anywhere in src/ (that
-// logic staying out of src/ entirely is what keeps `npm run build`
-// byte-identical to the shipping build -- see CONTRIBUTING.md). A
-// browser only omits the port from `location.host` for the scheme's own
-// default port, and http's default port is 80.
+// Binds scripts/lib/fixture-port.mjs's DEFAULT_FIXTURE_PORT (8080) unless
+// PPC_FIXTURE_PORT overrides it -- no elevated privileges needed for that
+// default. Every fixture except one loads and gets scanned by the generic
+// detector at any port. The one exception (the full installment offer,
+// matched through the real shopify-checkout adapter code -- see
+// scripts/lib/dev-build.mjs) only reaches the adapter-matched
+// PARSED_CONFIRMABLE state when this server is bound to port 80
+// specifically (scripts/lib/fixture-port.mjs's HTTP_DEFAULT_PORT) --
+// see that constant's own comment for exactly why, and CONTRIBUTING.md
+// for how to bind it on purpose. That is a fact about how a browser
+// reports `location.host` and how src/config/loader.ts validates an
+// adapter's `hosts` list, not something this file can work around at a
+// different port.
 //
-// If you cannot or would rather not bind port 80, set PPC_FIXTURE_PORT to
-// any other port. Every fixture except the primary one is completely
-// unaffected by port choice (none of them depend on adapter host
-// matching); the primary fixture will still load and be scanned by the
-// generic detector at another port, just not through the adapter-matched
-// PARSED_CONFIRMABLE path this build exists to exercise.
+// npm run build:dev writes dist-dev/.dev-build-meta.json recording which
+// port it was built expecting; this server reads it back at startup and
+// warns (never fatally) if the two disagree -- see
+// scripts/lib/fixture-port.mjs's describeFixturePortMismatch.
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { URL } from "node:url";
 import { FIXTURE_ROUTES } from "./fixture-routes.mjs";
+import { canReachAdapterMatchedFixture, describeFixturePortMismatch, HTTP_DEFAULT_PORT, resolveFixturePort } from "../lib/fixture-port.mjs";
 
-const DEFAULT_PORT = 80;
-const rawPort = process.env.PPC_FIXTURE_PORT;
-const PORT = rawPort ? Number.parseInt(rawPort, 10) : DEFAULT_PORT;
+const PORT = resolveFixturePort();
+const DEV_BUILD_META_PATH = join(process.cwd(), "dist-dev", ".dev-build-meta.json");
+
+async function readDevBuildMeta() {
+  try {
+    const text = await readFile(DEV_BUILD_META_PATH, "utf-8");
+    return JSON.parse(text);
+  } catch {
+    return null; // no dev build yet, or unreadable -- advisory only, never fatal
+  }
+}
 
 function renderIndexHtml() {
   const items = FIXTURE_ROUTES.map(
@@ -83,13 +92,21 @@ const server = createServer((req, res) => {
 server.on("error", (err) => {
   if (err.code === "EACCES") {
     console.error(`could not bind port ${PORT}: permission denied.\n`);
-    console.error("Port 80 is the default because it is the only port a browser reports as a bare");
-    console.error('"localhost" (no ":<port>") in location.host -- see this file\'s header comment.');
-    console.error("\nOptions:");
-    console.error("  1. sudo npm run serve:fixtures");
-    console.error("  2. sudo setcap 'cap_net_bind_service=+ep' $(which node)   (one-time, this machine)");
-    console.error("  3. PPC_FIXTURE_PORT=<port> npm run serve:fixtures         (every fixture except");
-    console.error("     the primary one is unaffected by port choice)");
+    console.error(`Port ${PORT} needs an elevated bind on this machine.`);
+    if (PORT === HTTP_DEFAULT_PORT) {
+      console.error(`You asked for port ${HTTP_DEFAULT_PORT} specifically -- that is only needed to reach the`);
+      console.error("adapter-matched primary fixture (see CONTRIBUTING.md). Options:");
+      console.error("  1. sudo npm run serve:fixtures");
+      console.error("  2. sudo setcap 'cap_net_bind_service=+ep' $(which node)   (one-time, this machine)");
+    } else {
+      console.error(`Set PPC_FIXTURE_PORT to a port this machine lets you bind without elevation.`);
+    }
+    process.exit(1);
+  }
+  if (err.code === "EADDRINUSE") {
+    console.error(`could not bind port ${PORT}: already in use.\n`);
+    console.error("Something else on this machine is already listening there. Either stop it, or run:");
+    console.error(`  PPC_FIXTURE_PORT=<a free port> npm run serve:fixtures`);
     process.exit(1);
   }
   throw err;
@@ -100,10 +117,15 @@ server.listen(PORT, () => {
   for (const route of FIXTURE_ROUTES) {
     console.log(`  http://localhost:${PORT}${route.path}  -- ${route.label}`);
   }
-  if (PORT !== DEFAULT_PORT) {
+  if (!canReachAdapterMatchedFixture(PORT)) {
     console.log(
-      `\nNote: PPC_FIXTURE_PORT=${PORT} -- the primary fixture will not reach the adapter-matched`,);
-    console.log("PARSED_CONFIRMABLE state at this port (it needs port 80). Everything else is unaffected.");
+      `\nNote: bound to port ${PORT} -- the primary fixture will not reach the adapter-matched`,);
+    console.log(`PARSED_CONFIRMABLE state here (it needs port ${HTTP_DEFAULT_PORT}). Everything else is unaffected.`);
   }
+  readDevBuildMeta().then((meta) => {
+    if (!meta) return;
+    const mismatch = describeFixturePortMismatch(meta.expectedFixturePort, PORT);
+    if (mismatch) console.warn(`\nMISMATCH: ${mismatch}`);
+  });
   console.log("\nLoad dist-dev/ unpacked in Chrome (npm run build:dev first) to browser-test these.");
 });

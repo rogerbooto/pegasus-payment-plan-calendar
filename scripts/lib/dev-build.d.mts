@@ -14,3 +14,10 @@ export const DEV_ADAPTER_PATH_PREFIX: string;
 export function deriveDevManifest(manifest: Record<string, unknown>): Record<string, unknown>;
 
 export function deriveDevAdaptersConfig(config: Record<string, unknown>): Record<string, unknown>;
+
+export interface DevBuildMeta {
+  readonly expectedFixturePort: number;
+  readonly primaryFixtureAdapterMatchable: boolean;
+}
+
+export function buildDevMeta(fixturePort: number): DevBuildMeta;

@@ -24,9 +24,15 @@
 import { build } from "esbuild";
 import { join } from "node:path";
 import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { deriveDevAdaptersConfig, deriveDevManifest } from "./lib/dev-build.mjs";
+import { buildDevMeta, deriveDevAdaptersConfig, deriveDevManifest } from "./lib/dev-build.mjs";
+import { HTTP_DEFAULT_PORT, resolveFixturePort } from "./lib/fixture-port.mjs";
 
 const OUT_DIR = "dist-dev";
+// Single source of truth (scripts/lib/fixture-port.mjs), shared with
+// scripts/dev/serve-fixtures.mjs -- see CONTRIBUTING.md and this
+// variable's use below.
+const fixturePort = resolveFixturePort();
+const devMeta = buildDevMeta(fixturePort);
 const MANIFEST_SUFFIX = join("src", "manifest.json");
 const ADAPTERS_CONFIG_SUFFIX = join("src", "config", "adapters.config.json");
 
@@ -92,6 +98,22 @@ for (const f of await readdir("src/icons")) {
   await copyFile(join("src", "icons", f), join(OUT_DIR, "icons", f));
 }
 
+// Never part of the loaded extension (Chrome only ever reads the files
+// above) -- read back by scripts/dev/serve-fixtures.mjs at startup so a
+// port mismatch between this build and that server is reported loudly,
+// not discovered by a fixture quietly failing to detect anything. See
+// scripts/lib/dev-build.mjs's buildDevMeta and
+// scripts/lib/fixture-port.mjs's describeFixturePortMismatch.
+await writeFile(join(OUT_DIR, ".dev-build-meta.json"), `${JSON.stringify(devMeta, null, 2)}\n`);
+
 console.log(`\ndev build written to ${OUT_DIR}/`);
 console.log(`host_permissions gained: ${devManifest.host_permissions.slice(-2).join(", ")}`);
+console.log(`expects the fixture server on port ${fixturePort} (npm run serve:fixtures) -- set PPC_FIXTURE_PORT before both commands to use a different one.`);
+if (!devMeta.primaryFixtureAdapterMatchable) {
+  console.log(
+    `\nNote: the primary fixture (full installment offer) only reaches the adapter-matched PARSED_CONFIRMABLE ` +
+      `state when actually served on port ${HTTP_DEFAULT_PORT} -- see CONTRIBUTING.md. Every other fixture works ` +
+      `fine at port ${fixturePort}.`,
+  );
+}
 console.log("This build must never be published. See CONTRIBUTING.md's local fixture-testing section.");

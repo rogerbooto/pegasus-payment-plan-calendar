@@ -22,6 +22,11 @@
 // that introduced this file for the before/after hash comparison). That
 // constraint is WHY the two host-permission patterns below look slightly
 // asymmetric -- see each one's own comment.
+//
+// canReachAdapterMatchedFixture, imported below, is used only by
+// buildDevMeta at the bottom of this file -- see that function's own
+// comment.
+import { canReachAdapterMatchedFixture } from "./fixture-port.mjs";
 
 /**
  * The fixture server (scripts/dev/serve-fixtures.mjs) speaks plain http.
@@ -50,14 +55,26 @@ export const DEV_HOST_PATTERN_HTTPS = "https://localhost/*";
 
 /**
  * The bare hostname src/engine/adapter-common.ts's matchAdapterConfig
- * compares a page's `location.host` against, unmodified. Config hosts
- * are validated bare hostnames only (src/config/loader.ts's HOST_CHARSET
- * has no room for a colon), and `location.host` only omits a port for
- * the scheme's own default port -- http's is 80. That is why
- * scripts/dev/serve-fixtures.mjs binds port 80 by default: it is what
- * makes a real browser report `location.host` as exactly "localhost",
- * with nothing left to strip, so the unmodified adapter-matching code
- * needs no change either.
+ * compares a page's `location.host` against, unmodified. This value
+ * cannot ever carry a port, and that is not a simplification made for
+ * convenience -- src/config/loader.ts's HOST_CHARSET
+ * (`/^[a-z0-9.-]+$/`) has no room for a colon, so a `hosts` entry like
+ * "localhost:8080" fails validation outright, which disables the WHOLE
+ * shopify-checkout adapter entry it's attached to, not just that one
+ * host (verified directly against validateConfig; see
+ * scripts/lib/fixture-port.mjs's own header comment and
+ * tests/static/fixture-port.test.ts).
+ *
+ * `location.host` only omits a port for the scheme's own default port --
+ * http's is 80 -- so this bare "localhost" entry can only ever compare
+ * equal to a real browser's `location.host` when
+ * scripts/dev/serve-fixtures.mjs is actually bound to port 80
+ * (scripts/lib/fixture-port.mjs's HTTP_DEFAULT_PORT), regardless of
+ * scripts/lib/fixture-port.mjs's DEFAULT_FIXTURE_PORT (8080, chosen so
+ * every OTHER fixture needs no elevated privilege at all). Serving on
+ * 8080 still serves this fixture as an ordinary page; it just does not
+ * reach the adapter-matched PARSED_CONFIRMABLE state through it -- see
+ * CONTRIBUTING.md for how to reach that state on purpose.
  */
 export const DEV_ADAPTER_HOST = "localhost";
 
@@ -134,5 +151,23 @@ export function deriveDevAdaptersConfig(config) {
         pathPatterns: [...shopify.pathPatterns, DEV_ADAPTER_PATH_PREFIX],
       },
     },
+  };
+}
+
+/**
+ * The small, gitignored `dist-dev/.dev-build-meta.json` payload
+ * scripts/build-dev.mjs writes alongside the extension files (never part
+ * of the loaded extension itself -- Chrome never reads it). Pure function
+ * of the resolved fixture port (scripts/lib/fixture-port.mjs's
+ * resolveFixturePort) so it's directly testable without touching the
+ * filesystem. scripts/dev/serve-fixtures.mjs reads this file back at
+ * startup and warns loudly (never fatally -- see
+ * scripts/lib/fixture-port.mjs's describeFixturePortMismatch) if its own
+ * bind port disagrees with what was recorded here.
+ */
+export function buildDevMeta(fixturePort) {
+  return {
+    expectedFixturePort: fixturePort,
+    primaryFixtureAdapterMatchable: canReachAdapterMatchedFixture(fixturePort),
   };
 }
