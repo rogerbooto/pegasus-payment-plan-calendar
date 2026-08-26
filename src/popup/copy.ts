@@ -103,6 +103,17 @@ export const MARKETING_HOST = "https://marketing.pegasus.invalid";
 export const LAUNCH_NOTIFY_URL = `${MARKETING_HOST}/launch-notify`;
 
 /**
+ * The predicate behind MARKETING_HOST_CONFIGURED, exported as its own pure
+ * function so both directions — still the reserved placeholder, vs. a real
+ * configured host — can be exercised directly in tests against synthetic
+ * hosts, without needing a second, real resolvable origin checked into
+ * source just to prove the "true" branch works.
+ */
+export function isMarketingHostConfigured(host: string): boolean {
+  return !host.includes(".invalid");
+}
+
+/**
  * True once MARKETING_HOST has been replaced with a real, resolvable
  * origin. The email invite (a link-out to LAUNCH_NOTIFY_URL) only renders
  * when this is true — a "leave an email" control that would link nowhere
@@ -111,4 +122,4 @@ export const LAUNCH_NOTIFY_URL = `${MARKETING_HOST}/launch-notify`;
  * Flips automatically the moment MARKETING_HOST stops pointing at the
  * reserved `.invalid` placeholder; nothing else needs to change.
  */
-export const MARKETING_HOST_CONFIGURED = !MARKETING_HOST.includes(".invalid");
+export const MARKETING_HOST_CONFIGURED = isMarketingHostConfigured(MARKETING_HOST);

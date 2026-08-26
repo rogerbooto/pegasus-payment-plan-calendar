@@ -266,6 +266,14 @@ async function collectAllRenderedCopy(): Promise<string[]> {
     collected.push(...(await collectFromOverlay({ kind: "DEGRADED", reason: "no_match" }, store)));
   }
   {
+    // The pre-gate's own degraded state (src/engine/pre-gate.ts,
+    // src/engine/lifecycle.ts): a path/adapter signal fired with no
+    // affordance confirmation, so it renders NOT_CONFIRMED, not
+    // NOT_RECOGNIZED -- a distinct string, so it needs its own scan.
+    const store = memoryStore();
+    collected.push(...(await collectFromOverlay({ kind: "DEGRADED", reason: "unconfirmed" }, store)));
+  }
+  {
     const store = memoryStore();
     collected.push(...(await collectFromOverlay({
       kind: "PARTIAL",

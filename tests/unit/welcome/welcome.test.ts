@@ -13,7 +13,10 @@
  * rather than reimplementing onboarding a second time.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ONBOARD_PIN_HINT, ONBOARD_TURN_ON, ONBOARD_TITLE } from "../../../src/popup/copy";
+import { ONBOARD_PIN_HINT, ONBOARD_TURN_ON, ONBOARD_TITLE, INVITE_LEAVE_EMAIL, INVITE_BODY } from "../../../src/popup/copy";
+import { PlanLedger } from "../../../src/storage/ledger";
+import { chromeLocalStore } from "../../../src/storage/store";
+import { markViewedNext30 } from "../../../src/popup/usage-tracking";
 
 function installChromeMock(): () => void {
   const original = (globalThis as { chrome?: unknown }).chrome;
@@ -69,5 +72,52 @@ describe("welcome entry point — mounts the real onboarding screen, with the pi
     expect(root?.textContent).toContain(ONBOARD_TITLE);
     expect(root?.textContent).toContain(ONBOARD_TURN_ON);
     expect(root?.textContent).toContain(ONBOARD_PIN_HINT);
+  });
+
+  /**
+   * This tab mounts createPopupApp WITHOUT a
+   * marketingHostConfigured override (welcome.ts passes only
+   * showPinHint), so it must fall through to the same real default
+   * (copy.MARKETING_HOST_CONFIGURED) the toolbar popup uses — not a
+   * second, independently-set value that could silently diverge and
+   * bypass the gate on this newer surface. This drives the SAME mounted
+   * instance through onboarding to the hero screen (exactly how a real
+   * first-run user would reach it from this tab, not a synthetic
+   * "start on hero" shortcut), with both usefulness conditions met, and
+   * asserts the invite still does not render.
+   */
+  it("does not render the email invite on its own hero screen either, even once both usefulness conditions are met — the gate was not bypassed on this newer surface", async () => {
+    const ledger = new PlanLedger(chromeLocalStore);
+    // Settings must already exist for init() to land on "hero" rather
+    // than "onboard" -- readSettings() returning null is exactly what
+    // sends a fresh install to the onboarding screen instead.
+    await ledger.writeSettings({ checkoutReadingEnabled: false });
+    await ledger.addPlan({
+      id: "22222222-2222-4222-8222-222222222222",
+      createdAt: "2026-06-01",
+      source: "manual",
+      currency: "CAD",
+      orderTotalCents: 6000,
+      installmentCount: 4,
+      cadence: "MONTHLY",
+      perInstallmentCents: 1500,
+      firstPaymentDate: "2026-06-01",
+    });
+    await markViewedNext30(chromeLocalStore);
+
+    vi.resetModules();
+    await import("../../../src/welcome/welcome");
+    document.dispatchEvent(new Event("DOMContentLoaded"));
+    await flush();
+
+    const root = document.getElementById("ppc-welcome-root");
+    // A plan already exists, so init() should have skipped onboarding
+    // straight to the hero screen -- confirm that before asserting on the
+    // invite, so a broken skip can't quietly pass this as "invite absent
+    // because we're still on the onboarding screen".
+    expect(root?.textContent).not.toContain(ONBOARD_TITLE);
+    expect(root?.textContent).not.toContain(INVITE_BODY);
+    expect(root?.querySelector(".invite")).toBeNull();
+    expect([...(root?.querySelectorAll("button") ?? [])].some((b) => b.textContent === INVITE_LEAVE_EMAIL)).toBe(false);
   });
 });

@@ -20,7 +20,7 @@
  */
 import { describe, expect, it } from "vitest";
 import manifest from "../../../src/manifest.json";
-import { cheapPreGate } from "../../../src/engine/pre-gate";
+import { cheapPreGate, looksLikeCheckoutPath } from "../../../src/engine/pre-gate";
 import type { PageProbe } from "../../../src/engine/types";
 
 const PAYMENT_AFFORDANCE =
@@ -70,5 +70,50 @@ describe("pre-gate reaches every host the manifest asks for", () => {
 
   it("a page that is not a checkout stays dormant (proves the gate is not always-true)", () => {
     expect(cheapPreGate(probe("example.com", "/blog/a-post", "<p>hello</p>"))).toBe(false);
+  });
+});
+
+/**
+ * `cheapPreGate` failing is not the end of the story: `looksLikeCheckoutPath`
+ * is the weaker, cheaper half of the same decision, and it is what
+ * lifecycle.ts checks before letting a session go fully silent (see
+ * src/engine/lifecycle.ts's evaluatePreGate and DegradeReason's
+ * "unconfirmed" in src/shared/types.ts). This block pins the PRINCIPLE, not
+ * a symptom: for any host we hold permission for, a path that matches the
+ * lexicon is never `cheapPreGate: false` AND `looksLikeCheckoutPath: false`
+ * at once. Deliberately independent of PAYMENT_AFFORDANCE_SELECTORS'
+ * contents -- these fixtures carry NO markup at all, so the assertion holds
+ * regardless of what that list contains or how it changes.
+ */
+describe("looksLikeCheckoutPath — the structural signal that keeps a matched path from going fully silent", () => {
+  it.each(manifestHosts)(
+    "%s on its own realistic checkout path with NO affordance markup: cheapPreGate is strict (false) but looksLikeCheckoutPath still says something is worth reporting (true)",
+    (host) => {
+      const path = REALISTIC_CHECKOUT_PATH[host];
+      if (path === undefined) throw new Error(`no realistic checkout path recorded for host: ${host}`);
+      const bareProbe = probe(host, path, "<p>no payment affordance markup on this page at all</p>");
+      expect(cheapPreGate(bareProbe)).toBe(false);
+      expect(looksLikeCheckoutPath(bareProbe)).toBe(true);
+    },
+  );
+
+  /**
+   * Concrete case: the founder's reported URL shape
+   * (`/checkout/p/<redacted>/spc`), matched by the plain "/checkout" path
+   * pattern rather than either of the Amazon-specific "/gp/..." patterns
+   * already covered above. This pins the reported shape as a regression
+   * fixture; it does NOT assert the underlying report is resolved -- that
+   * is unconfirmed pending the console diagnostic and a live retest.
+   */
+  it("an Amazon-shaped checkout URL (/checkout/p/.../spc) with no affordance markup: looksLikeCheckoutPath is still true", () => {
+    const bareProbe = probe("www.amazon.ca", "/checkout/p/D1EF2C34AB56/spc", "<p>still rendering</p>");
+    expect(cheapPreGate(bareProbe)).toBe(false);
+    expect(looksLikeCheckoutPath(bareProbe)).toBe(true);
+  });
+
+  it("a page that is not a checkout at all: looksLikeCheckoutPath agrees with cheapPreGate (both false) — proves this is not always-true either", () => {
+    const bareProbe = probe("example.com", "/blog/a-post", "<p>hello</p>");
+    expect(cheapPreGate(bareProbe)).toBe(false);
+    expect(looksLikeCheckoutPath(bareProbe)).toBe(false);
   });
 });

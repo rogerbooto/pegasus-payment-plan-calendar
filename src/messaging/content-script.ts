@@ -20,7 +20,11 @@
  *    it hasn't navigated yet, would be the exact same defect this file
  *    exists to close, one step later.
  * 1. Run the cheap pre-gate once (URL path pattern + one structural probe).
- *    No checkout fingerprint => go dormant: no observer, no timers.
+ *    No checkout fingerprint at all => go fully dormant: no observer, no
+ *    timers, no state reported. A path/adapter match with no affordance
+ *    confirmation still goes observer-less, but is not silent: it reports
+ *    one honest DEGRADED("unconfirmed") state instead (src/engine/pre-gate.ts,
+ *    src/engine/lifecycle.ts's evaluatePreGate).
  * 2. On a match, select the winning adapter (src/engine/registry.ts),
  *    attach ONE MutationObserver scoped to the anchor subtree (never
  *    document), debounced, parse work in idle callbacks.

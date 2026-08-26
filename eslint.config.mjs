@@ -46,4 +46,17 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Build/release scripts run under Node directly (never bundled into
+    // the extension), so they need the two Node globals the base config
+    // above doesn't define for browser-extension source. Scoped narrowly
+    // to scripts/ rather than added repo-wide.
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        process: "readonly",
+        console: "readonly",
+      },
+    },
+  },
 );

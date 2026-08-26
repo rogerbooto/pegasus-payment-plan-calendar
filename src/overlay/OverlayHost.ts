@@ -511,8 +511,15 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
     }
   }
 
-  function renderNotRecognized(body: HTMLElement): void {
-    body.appendChild(el("p", { className: "plain", text: copy.NOT_RECOGNIZED }));
+  function renderNotRecognized(body: HTMLElement, state: EngineState): void {
+    // "unconfirmed" (the pre-gate's structural-signal-only degrade) never
+    // asserts the page IS a checkout -- some pages that reach it are not.
+    // Every other DEGRADED reason arrives after the full detector actually
+    // ran against real page content, so NOT_RECOGNIZED's "this checkout"
+    // framing is accurate there.
+    const message =
+      state.kind === "DEGRADED" && state.reason === "unconfirmed" ? copy.NOT_CONFIRMED : copy.NOT_RECOGNIZED;
+    body.appendChild(el("p", { className: "plain", text: message }));
     const actions = el("div", { className: "actions" });
     actions.appendChild(
       el("button", {
@@ -650,7 +657,7 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
     }
     if (screen.kind === "not_recognized" || state.kind === "DEGRADED") {
       const body = el("div", { className: "panel__body" });
-      renderNotRecognized(body);
+      renderNotRecognized(body, state);
       panel.appendChild(body);
       footer(panel);
       return;

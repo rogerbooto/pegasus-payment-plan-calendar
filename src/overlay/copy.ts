@@ -30,6 +30,15 @@ export const SAVED_UNDO = "Remove this plan";
 export const REMOVED_STATUS = "Removed.";
 export const REMOVED_UNDO = "Add it back";
 export const NOT_RECOGNIZED = "We don't recognize this checkout yet. You can add the plan manually.";
+/**
+ * Distinct from NOT_RECOGNIZED: shown when the pre-gate's structural signal
+ * (a URL pattern or platform match) fired but nothing on the page confirmed
+ * it, so the engine never actually looked at this page's checkout content.
+ * Unlike NOT_RECOGNIZED, this string never asserts the page IS a checkout --
+ * some pages that reach this state (e.g. a path that merely contains the
+ * word "checkout") are not.
+ */
+export const NOT_CONFIRMED = "We can't tell if this page is a checkout. You can add the plan manually.";
 export const EMPTY_LEDGER = "No other plans entered yet. Anything you add shows up on this calendar.";
 export const SAVE_FAILED =
   "That didn't save. Your browser storage may be full. Try again, or check the extension's settings.";

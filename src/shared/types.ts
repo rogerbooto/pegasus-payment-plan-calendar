@@ -12,8 +12,19 @@ export type IsoDate = string;
 
 export type ScalarName = "orderTotal" | "installmentCount" | "cadence" | "perInstallment";
 
-/** Closed enum. Carries no page data by design. */
-export type DegradeReason = "no_match" | "gate_failed" | "adapter_error";
+/**
+ * Closed enum. Carries no page data by design.
+ *
+ * `unconfirmed` is distinct from `no_match`: `no_match` means the full
+ * generic detector ran against real page content and found nothing to
+ * hard-gate -- the page IS a checkout (or close enough), just not one we
+ * could parse. `unconfirmed` means the engine never got that far: the
+ * cheap pre-gate's structural signal (a path pattern or an adapter match)
+ * fired, but its affordance probe did not, so no observer was even
+ * attached and no real extraction was attempted. The overlay must not
+ * describe an `unconfirmed` page as "this checkout" -- it may not be one.
+ */
+export type DegradeReason = "no_match" | "gate_failed" | "adapter_error" | "unconfirmed";
 
 export type SoftSignal =
   | "provider_widget"

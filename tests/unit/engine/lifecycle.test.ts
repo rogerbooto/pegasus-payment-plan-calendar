@@ -20,6 +20,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEngineLifecycle } from "../../../src/engine/lifecycle";
 import { extractionCore } from "../../../src/engine/extraction-core";
+import { GENERIC_CHECKOUT_PATH_PATTERNS } from "../../../src/engine/generic-lexicon";
 import type { EngineState } from "../../../src/shared/types";
 
 /** Radiogroup: the cheap pre-gate's generic structural probe (src/engine/generic-lexicon.ts). */
@@ -236,5 +237,89 @@ describe("createEngineLifecycle", () => {
       lifecycle.teardown();
       observerSpy.restore();
     }
+  });
+
+  /**
+   * The bug this closes: a path/adapter structural match with no affordance
+   * confirmation went FULLY silent (no observer, no onState call at all --
+   * see the very first test in this file). This block pins the PRINCIPLE
+   * (never total silence when a path matches, for ANY host we hold
+   * permission for), not just "Amazon works now" -- it never inspects
+   * PAYMENT_AFFORDANCE_SELECTORS' contents, so a future edit to that list
+   * cannot silently re-break every other host's coverage of this case.
+   *
+   * The observer must still NOT attach here (src/engine/pre-gate.ts's
+   * `cheapPreGate` stays strict on purpose -- an observer is expensive and
+   * several path patterns are loose substrings that also match non-checkout
+   * pages on the same host). The honest state must reach onState anyway.
+   */
+  describe("path/adapter signal matched, no affordance confirmed => never silent, still no observer", () => {
+    it("a generic path match (pulled from the real lexicon, not restated here) with zero affordance markup reports DEGRADED('unconfirmed') and attaches no observer", async () => {
+      mountUnrelatedPage(); // no radiogroup, no payment form, no provider iframe -- nothing PAYMENT_AFFORDANCE_SELECTORS could ever match
+      const [genericPathPattern] = GENERIC_CHECKOUT_PATH_PATTERNS;
+      window.history.pushState({}, "", genericPathPattern);
+      const observerSpy = spyOnMutationObserver();
+      const onState = vi.fn();
+      const lifecycle = createEngineLifecycle({ doc: document, core: extractionCore, onState });
+      try {
+        vi.useFakeTimers();
+        lifecycle.start();
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(observerSpy.count()).toBe(0);
+        expect(onState).toHaveBeenCalledTimes(1);
+        expect(onState).toHaveBeenCalledWith({ kind: "DEGRADED", reason: "unconfirmed" });
+      } finally {
+        lifecycle.teardown();
+        observerSpy.restore();
+      }
+    });
+
+    /**
+     * Concrete, Amazon-shaped fixture matching the founder's reported URL
+     * shape (`/checkout/p/<redacted>/spc`) with no affordance markup on the
+     * page. This is a regression fixture for the REPORTED SHAPE, not a
+     * claim that the underlying report is resolved -- whether a real
+     * Amazon checkout actually reaches this exact branch (versus some other
+     * root cause) is unconfirmed pending the console diagnostic and a live
+     * retest.
+     */
+    it("an Amazon-shaped checkout path (/checkout/p/.../spc) with zero affordance markup also reports DEGRADED('unconfirmed'), never silence", async () => {
+      mountUnrelatedPage();
+      window.history.pushState({}, "", "/checkout/p/D1EF2C34AB56/spc");
+      const observerSpy = spyOnMutationObserver();
+      const onState = vi.fn();
+      const lifecycle = createEngineLifecycle({ doc: document, core: extractionCore, onState });
+      try {
+        vi.useFakeTimers();
+        lifecycle.start();
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(observerSpy.count()).toBe(0);
+        expect(onState).toHaveBeenCalledTimes(1);
+        expect(onState).toHaveBeenCalledWith({ kind: "DEGRADED", reason: "unconfirmed" });
+      } finally {
+        lifecycle.teardown();
+        observerSpy.restore();
+      }
+    });
+
+    it("once affordance markup is present, the ordinary path still wins: the observer attaches and NO 'unconfirmed' degrade fires", async () => {
+      mountPaymentAffordancePage();
+      window.history.pushState({}, "", "/checkout");
+      const observerSpy = spyOnMutationObserver();
+      const onState = vi.fn();
+      const lifecycle = createEngineLifecycle({ doc: document, core: extractionCore, onState });
+      try {
+        vi.useFakeTimers();
+        lifecycle.start();
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(observerSpy.count()).toBe(1);
+        for (const call of onState.mock.calls) {
+          expect(call[0]).not.toEqual({ kind: "DEGRADED", reason: "unconfirmed" });
+        }
+      } finally {
+        lifecycle.teardown();
+        observerSpy.restore();
+      }
+    });
   });
 });

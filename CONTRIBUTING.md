@@ -50,6 +50,21 @@ npm run check     # typecheck, lint, tests, build
 
 `npm run build` produces a loadable unpacked extension in `dist/`.
 
+## Before a release
+
+```
+npm run release-check   # build, then verify the build is release-ready
+```
+
+This is separate from `npm run check` on purpose. One known placeholder
+(the marketing-site link the popup's email invite points at) is a
+deliberate, reserved, non-resolving address during ordinary development —
+`npm run build` and `npm run check` are meant to keep passing with it in
+place. `npm run release-check` builds the extension and then checks the
+*built* files for that placeholder, and fails loudly, naming the exact
+constant and file to fix, if it's still there. Run it before packaging
+anything for the Chrome Web Store.
+
 ## Licensing
 
 Contributions are accepted under a contributor license agreement. The CLA text

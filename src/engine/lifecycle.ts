@@ -13,11 +13,18 @@
  * `document.body` as the narrowest available scope -- still not the
  * `document` node itself, and re-evaluated (and potentially narrowed) on
  * the next settled mutation batch once a real anchor appears.
+ *
+ * "Dormant" is not the same as "silent": when the pre-gate's structural
+ * signal (path or adapter) fires but its affordance probe does not, this
+ * module still reports one terminal `DEGRADED("unconfirmed")` state via
+ * `onState` and attaches no observer at all -- see `evaluatePreGate`. That
+ * split is deliberate: it is cheap to say something once, and expensive to
+ * keep watching a page that may not even be a real checkout.
  */
 import type { EngineState } from "../shared/types";
 import type { AnchorSet, ExtractionCore } from "./types";
 import { MUTATION_DEBOUNCE_MS } from "../shared/constants";
-import { cheapPreGate } from "./pre-gate";
+import { cheapPreGate, looksLikeCheckoutPath } from "./pre-gate";
 import { selectAdapter } from "./registry";
 import { createDomPageProbe } from "./dom-page-probe";
 import { runEngine } from "./engine";
@@ -140,11 +147,23 @@ export function createEngineLifecycle(deps: EngineLifecycleDeps): EngineLifecycl
 
   function evaluatePreGate(): void {
     const page = createDomPageProbe(deps.doc);
-    if (!cheapPreGate(page)) {
-      detachObserver(); // dormant: no checkout fingerprint, no observer, no timers
+    if (cheapPreGate(page)) {
+      attachObserver();
       return;
     }
-    attachObserver();
+    detachObserver(); // dormant either way below: no observer, no timers
+
+    // The observer stays off (see pre-gate.ts on why: several path patterns
+    // are loose substrings, and this codebase will not pay for continuous
+    // DOM observation on every page that merely contains one). But total
+    // silence is not an acceptable fallback: if the path/adapter signal
+    // says this looks like a checkout, that is worth saying once, even
+    // without the affordance confirmation the observer path requires.
+    // This never fires twice for the same session -- evaluatePreGate runs
+    // exactly once per start() and once per route change.
+    if (looksLikeCheckoutPath(page)) {
+      deps.onState({ kind: "DEGRADED", reason: "unconfirmed" });
+    }
   }
 
   function onRouteChange(): void {
