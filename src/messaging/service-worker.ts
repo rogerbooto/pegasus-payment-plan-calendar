@@ -20,6 +20,13 @@ function isExtensionContext(): boolean {
 if (isExtensionContext()) {
   chrome.runtime.onMessage.addListener((_message, sender, _sendResponse) => {
     if (!isTrustedSender(sender)) return;
-    // Message protocol lands with the overlay and engine tasks.
+    // No message protocol exists, by design: the content script and the
+    // toolbar popup both talk to storage directly through
+    // src/storage/store.ts, so there is nothing for this worker to route
+    // between them. Keep the listener (and its sender check) rather than
+    // remove it — a future per-origin permission feature (the deferred
+    // "enable on this store" affordance) is the first plausible reason a
+    // real message would ever need to reach this worker, and this is
+    // where that reviewed protocol lands.
   });
 }

@@ -1,12 +1,11 @@
 /**
  * The toolbar popup's own controller: the 30-day-adjacent hero view,
- * settings (with the first-run measurement ask folded into "Continue"),
- * the genuineness screen (src/overlay/ToolbarVerification.ts), and the
- * email invite link-out. This popup only ever opens from the browser's own
- * toolbar (declared as `action.default_popup` in the manifest) — no page
- * can make it appear and no page can put anything inside it, which is
- * exactly what makes it the one place genuineness language and the
- * Pegasus mention are allowed (T14, the design spec).
+ * settings, the genuineness screen (src/overlay/ToolbarVerification.ts),
+ * and the email invite link-out. This popup only ever opens from the
+ * browser's own toolbar (declared as `action.default_popup` in the
+ * manifest) — no page can make it appear and no page can put anything
+ * inside it, which is exactly what makes it the one place genuineness
+ * language and the Pegasus mention are allowed (T14, the design spec).
  *
  * T14: nothing in this file is a credential/PII input. The email invite is
  * a link-out (`window.open`/`chrome.tabs.create` to a static, developer-
@@ -16,7 +15,7 @@
 import type { PaymentPlanRecord } from "../shared/types";
 import { formatCents } from "../shared/format";
 import { addCents, type Cents, ZERO_CENTS } from "../shared/money";
-import { PlanLedger, STORAGE_KEY_ALLOWLIST, type Settings } from "../storage/ledger";
+import { PlanLedger, STORAGE_KEY_ALLOWLIST } from "../storage/ledger";
 import { chromeLocalStore, type KeyValueStore } from "../storage/store";
 import { paymentDates } from "../impact/engine";
 import { renderManualEntrySheet } from "../overlay/ConfirmationSheet";
@@ -32,6 +31,12 @@ export interface PopupAppDeps {
   readonly ledger?: PlanLedger;
   readonly today?: () => string;
   readonly openUrl?: (url: string) => void;
+  /**
+   * Testing-only override for copy.MARKETING_HOST_CONFIGURED. Real callers
+   * never pass this: it exists so the invite's rendering logic is exercised
+   * without needing a real, resolvable MARKETING_HOST checked into source.
+   */
+  readonly marketingHostConfigured?: boolean;
 }
 
 type Screen = "hero" | "settings" | "verify" | "onboard" | "manual";
@@ -59,24 +64,6 @@ function next30Total(plans: readonly PaymentPlanRecord[], today: string): { tota
   return { totalCents, count };
 }
 
-function switchRow(labelText: string, checked: boolean, onToggle: (next: boolean) => void, desc?: string): HTMLDivElement {
-  const labelId = `ppc-sw-${labelText.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-  const textCol = el("div", {
-    className: "popup__row-text",
-    attrs: { id: labelId },
-    children: [text(labelText), desc ? el("div", { className: "popup__row-desc", text: desc }) : null],
-  });
-  const btn = el("button", {
-    attrs: { type: "button", role: "switch", "aria-checked": String(checked), "aria-labelledby": labelId },
-    className: "switchbtn",
-    children: [el("span", { className: checked ? "switch" : "switch switch--off", attrs: { "aria-hidden": "true" } })],
-    on: {
-      click: () => onToggle(!checked),
-    },
-  });
-  return el("div", { className: "popup__row", children: [textCol, btn] });
-}
-
 export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) {
   const store = deps.store ?? chromeLocalStore;
   const ledger = deps.ledger ?? new PlanLedger(store);
@@ -90,10 +77,9 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
         window.open(url, "_blank", "noopener");
       }
     });
+  const marketingHostConfigured = deps.marketingHostConfigured ?? copy.MARKETING_HOST_CONFIGURED;
 
   let screen: Screen = "hero";
-  let onThisSite = true;
-  let everywhere = true;
 
   async function render(): Promise<void> {
     clear(container);
@@ -180,18 +166,8 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
         ],
       }),);
 
-    const settings = await getSettings();
-    const switches = el("div", { attrs: { style: "margin-top:16px" } });
-    switches.appendChild(switchRow(copy.SWITCH_ON_THIS_SITE, onThisSite, (v) => { onThisSite = v; void render(); }));
-    switches.appendChild(switchRow(copy.SWITCH_EVERYWHERE, everywhere, (v) => { everywhere = v; void render(); }));
-    switches.appendChild(
-      switchRow(copy.SWITCH_COUNT, settings.measurementEnabled, (v) => {
-        void ledger.writeSettings({ measurementEnabled: v }).then(render);
-      }),);
-    body.appendChild(switches);
-
     const usage = await readUsageFlags(store);
-    if (plans.length >= 1 && usage.viewedNext30 && !usage.inviteDismissed) {
+    if (plans.length >= 1 && usage.viewedNext30 && !usage.inviteDismissed && marketingHostConfigured) {
       body.appendChild(buildInvite());
     }
 
@@ -240,13 +216,6 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
     });
   }
 
-  async function getSettings(): Promise<Settings> {
-    const result = await store.get(["settings"]);
-    const raw = result["settings"];
-    if (raw && typeof raw === "object" && "measurementEnabled" in raw) return raw as Settings;
-    return { measurementEnabled: false };
-  }
-
   async function renderSettings(panel: HTMLElement): Promise<void> {
     const head = el("div", {
       className: "panel__head",
@@ -261,29 +230,7 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
       ],
     });
 
-    const settings = await getSettings();
     const body = el("div", { className: "panel__body" });
-
-    const whereGroup = el("div", {
-      className: "settings__group",
-      children: [
-        el("div", { className: "settings__h", text: copy.SETTINGS_GROUP_WHERE }),
-        switchRow(copy.SWITCH_EVERYWHERE, everywhere, (v) => { everywhere = v; void render(); }, copy.SETTINGS_EVERYWHERE_DESC),
-      ],
-    });
-    body.appendChild(whereGroup);
-
-    const countingGroup = el("div", {
-      className: "settings__group",
-      children: [
-        el("div", { className: "settings__h", text: copy.SETTINGS_GROUP_COUNTING }),
-        switchRow(copy.SWITCH_COUNT, settings.measurementEnabled, (v) => {
-          void ledger.writeSettings({ measurementEnabled: v }).then(render);
-        }, copy.SETTINGS_COUNT_DESC),
-        el("p", { className: "settings__note", text: copy.SETTINGS_COUNT_NOTE }),
-      ],
-    });
-    body.appendChild(countingGroup);
 
     const dataGroup = el("div", {
       className: "settings__group",
@@ -339,7 +286,7 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
   }
 
   async function deleteAllData(): Promise<void> {
-    await store.remove([...STORAGE_KEY_ALLOWLIST, "usage"]);
+    await store.remove([...STORAGE_KEY_ALLOWLIST]);
   }
 
   async function renderOnboard(): Promise<void> {
@@ -348,7 +295,12 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
     section.appendChild(el("h3", { attrs: { id: "ppc-onboard-h" }, text: copy.ONBOARD_TITLE }));
     section.appendChild(el("p", { text: copy.ONBOARD_BODY }));
 
-    let pageReadingOn: boolean | null = null;
+    // Visual-only "pick one" pair: neither button currently persists a
+    // page-reading preference anywhere a real detection decision reads
+    // from (there is no per-origin permission state to write it into yet
+    // — see copy.ts's note on the removed "On this site" / "Everywhere"
+    // switches). Continue always proceeds either way, matching
+    // ONBOARD_SKIP_NOTE's promise that both paths work identically.
     const turnOnBtn = el("button", {
       className: "btn btn--primary",
       attrs: { type: "button", "aria-pressed": "false" },
@@ -372,30 +324,15 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
       ],
     });
     turnOnBtn.addEventListener("click", () => {
-      pageReadingOn = true;
       turnOnBtn.setAttribute("aria-pressed", "true");
       noThanksBtn.setAttribute("aria-pressed", "false");
     });
     noThanksBtn.addEventListener("click", () => {
-      pageReadingOn = false;
       noThanksBtn.setAttribute("aria-pressed", "true");
       turnOnBtn.setAttribute("aria-pressed", "false");
     });
     section.appendChild(el("div", { className: "actions", attrs: { "data-consent-pair": "" }, children: [turnOnBtn, noThanksBtn] }));
     section.appendChild(el("p", { className: "onboard__skipnote", text: copy.ONBOARD_SKIP_NOTE }));
-
-    const countBlock = el("div", { className: "onboard__block" });
-    countBlock.appendChild(el("h4", { text: copy.ONBOARD_COUNT_HEADING }));
-    countBlock.appendChild(el("p", { text: copy.ONBOARD_COUNT_BODY }));
-    let countingOn = false;
-    const countRow = el("div", { className: "onboard__row" });
-    countRow.appendChild(switchRow(copy.SWITCH_COUNT, countingOn, (v) => {
-      countingOn = v;
-      void render();
-    }));
-    countBlock.appendChild(countRow);
-    countBlock.appendChild(el("p", { className: "settings__note", text: copy.SETTINGS_COUNT_NOTE }));
-    section.appendChild(countBlock);
 
     section.appendChild(
       el("div", {
@@ -408,9 +345,12 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
             text: copy.ONBOARD_CONTINUE,
             on: {
               click: () => {
-                onThisSite = pageReadingOn === true;
-                everywhere = pageReadingOn === true;
-                void ledger.writeSettings({ measurementEnabled: countingOn }).then(() => go("hero"));
+                // measurementEnabled stays false: the control that used to
+                // let onboarding set it true has been removed (no
+                // transport exists to consent to). See storage/ledger.ts's
+                // note on this field for why a stale persisted `true`
+                // from an older install must not be resurrected either.
+                void ledger.writeSettings({ measurementEnabled: false }).then(() => go("hero"));
               },
             },
           }),

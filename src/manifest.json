@@ -15,11 +15,6 @@
     "https://www.amazon.com/*",
     "https://www.amazon.ca/*"
   ],
-  "optional_host_permissions": [
-    "https://*/checkouts/*",
-    "https://*/checkout/*",
-    "https://*/checkout"
-  ],
   "content_scripts": [
     {
       "matches": [

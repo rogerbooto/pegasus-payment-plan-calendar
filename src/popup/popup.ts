@@ -13,17 +13,6 @@ import { createPopupApp } from "./PopupApp";
 import { styleTag } from "../overlay/dom";
 import { POPUP_CSS } from "./theme";
 
-/**
- * The ONLY chrome.permissions.request call site in the codebase, invoked
- * exclusively from a user gesture on the "Enable on this store" control.
- * Before offering the persistent grant, the implementing task must probe
- * the checkout fingerprint via the activeTab grant; a page that does not
- * fingerprint as a supported checkout gets no request at all.
- */
-export async function onEnableThisStoreClick(originPattern: string): Promise<boolean> {
-  return chrome.permissions.request({ origins: [originPattern] });
-}
-
 function isExtensionPageContext(): boolean {
   return typeof document !== "undefined" && typeof window !== "undefined";
 }

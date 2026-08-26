@@ -87,20 +87,35 @@ describe("PopupApp — hero view", () => {
     expect(el.querySelector(".summary")?.textContent).toContain("Your next 30 days:");
   });
 
-  it("the counting switch is a real role=switch control wired to persisted settings", async () => {
+  it("renders no counting toggle, and no site-scope switches -- the controls this build does not implement never render at all", async () => {
     const store = createFakeStore({ settings: { measurementEnabled: false } });
     const el = root();
     await createPopupApp(el, { store }).init();
 
-    const countSwitch = [...el.querySelectorAll('[role="switch"]')].find(
-      (s) => s.getAttribute("aria-labelledby") && el.querySelector(`#${s.getAttribute("aria-labelledby")}`)?.textContent?.includes("Count how often"),) as HTMLButtonElement;
-    expect(countSwitch.getAttribute("aria-checked")).toBe("false");
+    expect(el.querySelectorAll('[role="switch"]').length).toBe(0);
+    expect(el.textContent).not.toContain("Count how often");
+    expect(el.textContent).not.toContain("On this site");
+    expect(el.textContent).not.toContain("Everywhere");
 
-    countSwitch.click();
+    (el.querySelector('[aria-label="Settings"]') as HTMLButtonElement).click();
     await flush();
+    expect(el.querySelectorAll('[role="switch"]').length).toBe(0);
+    expect(el.textContent).not.toContain("Count how often");
+    expect(el.textContent).not.toContain("On this site");
+    expect(el.textContent).not.toContain("Everywhere");
+    // The settings screen still exists and still offers real, honored
+    // controls (the ones the rest of this file exercises) -- this is a
+    // targeted absence, not a broken screen.
+    expect(el.textContent).toContain("Delete all my data");
+  });
 
-    const settings = await store.get(["settings"]);
-    expect(settings.settings).toEqual({ measurementEnabled: true });
+  it("a stale persisted measurementEnabled: true from before the toggle was removed is never surfaced as an active control", async () => {
+    const store = createFakeStore({ settings: { measurementEnabled: true } });
+    const el = root();
+    await createPopupApp(el, { store }).init();
+
+    expect(el.querySelectorAll('[role="switch"]').length).toBe(0);
+    expect(el.textContent).not.toContain("Count how often");
   });
 });
 
@@ -147,6 +162,22 @@ describe("PopupApp — delete all data", () => {
   });
 });
 
+describe("PopupApp — data note makes no claim the product doesn't honor", () => {
+  it("does not claim a plan is removed on its own after any number of days -- there is no sweep, no scheduled job, and no alarms permission behind that claim", async () => {
+    const store = createFakeStore({ settings: { measurementEnabled: false } });
+    const el = root();
+    await createPopupApp(el, { store }).init();
+
+    (el.querySelector('[aria-label="Settings"]') as HTMLButtonElement).click();
+    await flush();
+
+    expect(el.textContent).not.toMatch(/removed on its own/i);
+    expect(el.textContent).not.toMatch(/\d+\s*days/i);
+    // The one part of that claim that IS true stays.
+    expect(el.textContent).toContain("Delete all my data");
+  });
+});
+
 describe("PopupApp — genuineness screen reachable only from Settings", () => {
   it("Settings -> How to know it's genuine renders the toolbar verification content", async () => {
     const store = createFakeStore({ settings: { measurementEnabled: false } });
@@ -168,16 +199,28 @@ describe("PopupApp — email invite (link-out, never a field)", () => {
   it("does not render until a plan is saved AND the 30-day view has been opened", async () => {
     const store = createFakeStore({ settings: { measurementEnabled: false }, plans: [samplePlan()] });
     const el = root();
+    await createPopupApp(el, { store, today: () => "2026-06-01", marketingHostConfigured: true }).init();
+
+    expect(el.querySelector(".invite")).toBeNull();
+  });
+
+  it("never renders while MARKETING_HOST is the unconfigured placeholder, even once both usefulness conditions are met (a link-out to nowhere is worse than no invite)", async () => {
+    const store = createFakeStore({ settings: { measurementEnabled: false }, plans: [samplePlan()] });
+    await markViewedNext30(store);
+    const el = root();
+    // No marketingHostConfigured override -- this is the real, shipped
+    // default (copy.MARKETING_HOST_CONFIGURED), which is false as long as
+    // MARKETING_HOST is the reserved `.invalid` placeholder.
     await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
 
     expect(el.querySelector(".invite")).toBeNull();
   });
 
-  it("renders once both usefulness conditions are met, and is never an email input field", async () => {
+  it("renders once both usefulness conditions are met AND the marketing host is configured, and is never an email input field", async () => {
     const store = createFakeStore({ settings: { measurementEnabled: false }, plans: [samplePlan()] });
     await markViewedNext30(store);
     const el = root();
-    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+    await createPopupApp(el, { store, today: () => "2026-06-01", marketingHostConfigured: true }).init();
 
     const invite = el.querySelector(".invite");
     expect(invite).not.toBeNull();
@@ -190,7 +233,7 @@ describe("PopupApp — email invite (link-out, never a field)", () => {
     await markViewedNext30(store);
     const el = root();
     const openUrl = vi.fn();
-    await createPopupApp(el, { store, today: () => "2026-06-01", openUrl }).init();
+    await createPopupApp(el, { store, today: () => "2026-06-01", openUrl, marketingHostConfigured: true }).init();
 
     const leaveEmailBtn = [...el.querySelectorAll("button")].find((b) => b.textContent === "Leave an email") as HTMLButtonElement;
     leaveEmailBtn.click();
@@ -204,7 +247,7 @@ describe("PopupApp — email invite (link-out, never a field)", () => {
     const store = createFakeStore({ settings: { measurementEnabled: false }, plans: [samplePlan()] });
     await markViewedNext30(store);
     const el = root();
-    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+    await createPopupApp(el, { store, today: () => "2026-06-01", marketingHostConfigured: true }).init();
 
     const noThanksBtn = [...el.querySelectorAll("button")].find((b) => b.textContent === "No thanks") as HTMLButtonElement;
     noThanksBtn.click();
@@ -213,7 +256,7 @@ describe("PopupApp — email invite (link-out, never a field)", () => {
     expect(el.querySelector(".invite")).toBeNull();
 
     const el2 = root();
-    await createPopupApp(el2, { store, today: () => "2026-06-01" }).init();
+    await createPopupApp(el2, { store, today: () => "2026-06-01", marketingHostConfigured: true }).init();
     expect(el2.querySelector(".invite")).toBeNull();
   });
 
@@ -222,7 +265,7 @@ describe("PopupApp — email invite (link-out, never a field)", () => {
     await markViewedNext30(store);
     await markInviteDismissed(store);
     const el = root();
-    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+    await createPopupApp(el, { store, today: () => "2026-06-01", marketingHostConfigured: true }).init();
 
     expect(el.querySelector(".invite")).toBeNull();
   });

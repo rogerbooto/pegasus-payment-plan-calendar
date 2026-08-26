@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { FORBIDDEN_KEY_SUBSTRINGS, PlanLedger, validatePlanRecord, validateSettings } from "../../src/storage/ledger";
+import {
+  FORBIDDEN_KEY_SUBSTRINGS,
+  PlanLedger,
+  STORAGE_KEY_ALLOWLIST,
+  validatePlanRecord,
+  validateSettings,
+  validateUsageFlags,
+} from "../../src/storage/ledger";
 import type { KeyValueStore } from "../../src/storage/store";
 import { StorageSchemaError } from "../../src/shared/errors";
 
@@ -87,6 +94,36 @@ describe("settings allowlist", () => {
   it("rejects unknown settings keys", () => {
     expect(() => validateSettings({ measurementEnabled: false, extra: 1 })).toThrow(
       StorageSchemaError,);
+  });
+});
+
+describe("usage-flags allowlist (closes the storage-seam bypass: 'usage' used to be written straight through KeyValueStore#set, outside every allowlist here)", () => {
+  it("accepts the closed usage-flags record", () => {
+    expect(validateUsageFlags({ viewedNext30: false, inviteDismissed: false })).toEqual({
+      viewedNext30: false,
+      inviteDismissed: false,
+    });
+  });
+
+  it("rejects a non-allowlisted field instead of silently persisting it -- RED if a future write path skips this validator", () => {
+    expect(() => validateUsageFlags({ viewedNext30: false, inviteDismissed: false, extra: 1 })).toThrow(
+      StorageSchemaError,);
+  });
+
+  it("rejects a field that would match a forbidden data class, via the closed-allowlist check (the same defense-in-depth shape plan records and settings get: assertNoForbiddenKeys is belt-and-braces here too, since the closed field set already rejects anything named 'merchant')", () => {
+    expect(() => validateUsageFlags({ viewedNext30: true, inviteDismissed: false, merchant: "x" })).toThrow(
+      StorageSchemaError,);
+    expect(() => validateUsageFlags({ viewedNext30: true, inviteDismissed: false, merchant: "x" })).toThrow(
+      /non-allowlisted field/,);
+  });
+
+  it("rejects a non-boolean value for either field", () => {
+    expect(() => validateUsageFlags({ viewedNext30: "yes", inviteDismissed: false })).toThrow(StorageSchemaError);
+    expect(() => validateUsageFlags({ viewedNext30: false, inviteDismissed: 1 })).toThrow(StorageSchemaError);
+  });
+
+  it("STORAGE_KEY_ALLOWLIST includes 'usage' -- the top-level key usage-tracking.ts writes is no longer outside this file's own closed schema", () => {
+    expect(STORAGE_KEY_ALLOWLIST).toContain("usage");
   });
 });
 

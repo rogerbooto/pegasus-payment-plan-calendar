@@ -8,10 +8,18 @@
  *   writer PlanLedger routes every write through. A second, unvalidated
  *   call site anywhere else would be a silent bypass of the whole
  *   allowlist/schema machinery in src/storage/ledger.ts.
- * - T18: `chrome.permissions.request(` must appear in exactly ONE file
- *   (src/popup/popup.ts's `onEnableThisStoreClick`), invoked only from a
+ * - T18: `chrome.permissions.request(` must appear in exactly ZERO files
+ *   today. The one call site this used to guard (src/popup/popup.ts's
+ *   `onEnableThisStoreClick`, backing a per-origin "Enable on this store"
+ *   control) had zero callers of its own — the control it belonged to was
+ *   never rendered — so both the manifest's `optional_host_permissions`
+ *   and the dead function were removed rather than shipped as a claim
+ *   with nothing behind it. When that feature returns, it reintroduces
+ *   exactly one call site, in src/popup/popup.ts, invoked only from a
  *   genuine user gesture (a toolbar-popup click handler), never from a
- *   background/content-script code path that could fire without one.
+ *   background/content-script code path that could fire without one —
+ *   this guard should be tightened back to "exactly one, and it's here"
+ *   in that same reviewed diff.
  */
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -81,7 +89,7 @@ describe("single call site — chrome.storage.local.set (T17)", () => {
   });
 });
 
-describe("single call site — chrome.permissions.request (T18)", () => {
+describe("no call site — chrome.permissions.request (T18, deferred feature)", () => {
   const files = walk(SRC_ROOT);
 
   it("liveness — the detector counts a planted second call site correctly", () => {
@@ -90,19 +98,15 @@ describe("single call site — chrome.permissions.request (T18)", () => {
     expect(matches?.length).toBe(2);
   });
 
-  it("exactly one file in src/ calls chrome.permissions.request(and it is src/popup/popup.ts", () => {
+  it("zero files in src/ call chrome.permissions.request( — optional_host_permissions and onEnableThisStoreClick were removed together, not left as an unrenderable control with a live permission grant behind it", () => {
     const hits = countCallSites(files, PERMISSIONS_REQUEST_PATTERN);
     const totalCallSites = hits.reduce((sum, h) => sum + h.count, 0);
-    expect(hits.map((h) => h.file)).toEqual([join(SRC_ROOT, "popup", "popup.ts")]);
-    expect(totalCallSites).toBe(1);
+    expect(hits.map((h) => h.file)).toEqual([]);
+    expect(totalCallSites).toBe(0);
   });
 
-  it("the single call site is exported as a named function invoked from a click handler, not fired at module load or from a background/content-script context", () => {
+  it("popup.ts no longer defines onEnableThisStoreClick (the dead function this control's removal took with it)", () => {
     const src = readFileSync(join(SRC_ROOT, "popup", "popup.ts"), "utf-8");
-    // Structural: the call lives inside an exported function (a callable
-    // the popup's own click handler invokes), not inside a bare top-level
-    // `if (isExtensionPageContext()) { ... }` block that would fire
-    // unconditionally on every popup open.
-    expect(src).toMatch(/export\s+async\s+function\s+onEnableThisStoreClick[\s\S]*chrome\.permissions\.request/);
+    expect(src).not.toMatch(/onEnableThisStoreClick/);
   });
 });
