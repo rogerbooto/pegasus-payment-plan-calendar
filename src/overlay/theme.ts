@@ -7,14 +7,16 @@
  * `*`/`body`/inherited properties reaches inside, and nothing in here is
  * ever injected as a page-level stylesheet (T12's other half — this string
  * is only ever attached to a <style> living inside this shadow root).
+ *
+ * LIGHT_TOKENS/DARK_TOKENS are exported (not just inlined below) so
+ * src/popup/theme.ts can declare the exact same values on `:root` for the
+ * popup document -- a normal extension page, not a shadow root, where
+ * `:host` matches nothing at all. Re-declaring on `:root` from these same
+ * constants, rather than writing a second copy of the hex values there,
+ * keeps the two surfaces from ever drifting apart.
  */
 
-export const OVERLAY_CSS = `
-:host {
-  all: initial;
-  position: fixed;
-  z-index: 2147483647;
-  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+export const LIGHT_TOKENS = `
   --panel-w: 380px;
   --page-bg: #f9f8f5;
   --panel-bg: #ffffff;
@@ -31,23 +33,36 @@ export const OVERLAY_CSS = `
   --focus: #96764a;
   --btn-ink: #111111;
   --shadow: 0 10px 30px rgba(30,30,30,.10), 0 2px 6px rgba(30,30,30,.06);
+`;
+
+export const DARK_TOKENS = `
+  --panel-bg: #262626;
+  --panel-alt: #313131;
+  --border: #333333;
+  --border-strong: #474747;
+  --text: #f0f0f0;
+  --text-2: #cccccc;
+  --text-3: #909090;
+  --gold-ink: #c6a45e;
+  --gold-hover: #a3845a;
+  --control-line: #7a7a7a;
+  --focus: #d4bb7c;
+  --shadow: 0 12px 34px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.4);
+`;
+
+export const OVERLAY_CSS = `
+:host {
+  all: initial;
+  position: fixed;
+  z-index: 2147483647;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  ${LIGHT_TOKENS}
   top: 20px;
   right: 20px;
 }
 @media (prefers-color-scheme: dark) {
   :host {
-    --panel-bg: #262626;
-    --panel-alt: #313131;
-    --border: #333333;
-    --border-strong: #474747;
-    --text: #f0f0f0;
-    --text-2: #cccccc;
-    --text-3: #909090;
-    --gold-ink: #c6a45e;
-    --gold-hover: #a3845a;
-    --control-line: #7a7a7a;
-    --focus: #d4bb7c;
-    --shadow: 0 12px 34px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.4);
+    ${DARK_TOKENS}
   }
 }
 @media (max-width: 767px) {

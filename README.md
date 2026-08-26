@@ -11,16 +11,17 @@ other end of it.
 
 ## Status: in development. Nothing is released yet.
 
-This repository is public from the day it started, so the code can be read as it is written. Today
-it holds a license, this README, and not much else.
+This repository is public from the day it started, so the code can be read as it is written. There
+is working code here now: it builds, and you can load the result in your own browser.
 
 - There is **no published extension**. It is not in the Chrome Web Store.
-- There is **no build you can install**, and no application code here yet to build one from.
 - There is **no release date** to give you.
+- You **can** build it yourself and load it unpacked — see Installing below. Treat that as a look
+  at work in progress, not as a finished tool.
 
-Everything below describes what is being built and how it is meant to behave. Read it as a plan,
-not as something you can have today. When something ships, this section will say so and point at
-it. Until then, this section stays exactly this blunt.
+Everything below describes how it is meant to behave. Some of it works today and some of it does
+not. When it ships, this section will say so and point at it. Until then, this section stays
+exactly this blunt.
 
 ---
 
@@ -90,10 +91,19 @@ moment someone is deciding whether to borrow, is the one thing that will not shi
 Not a slogan. Here is the whole of it.
 
 **What is stored:** the order total, the number of payments, how often they fall due, and the
-amount of each payment — for each plan you save. Plus your own settings. That is the complete list.
+amount of each payment — for each plan you save. Plus your answer to the one question it asks you:
+whether it may read checkout pages at all. Plus two small notes about what you have already seen in
+the extension's own window: whether you have opened the 30-day view, and whether you have dismissed
+the one note about Pegasus. That is the complete list of what it holds about you — the only other
+thing in storage is a number recording which version of the storage format is in use.
 
 **Where it is stored:** local extension storage, in your browser, on your computer. Nothing else
 holds a copy.
+
+**Reading checkout pages is off until you say otherwise.** It asks once, when you install it, and
+it does not read anything until you answer yes. You can change that answer at any time in Settings,
+and turning it off takes effect immediately — including on a checkout page you already have open.
+Turning it off keeps every plan you saved; deleting your data is a separate action.
 
 **What is transmitted:** nothing. The extension makes no network connections at all. The
 instructions it uses to read a checkout are bundled inside the package and change only when a new
@@ -101,18 +111,19 @@ version ships through the store — nothing is fetched while it runs, and no cod
 you install it. Open your browser's network tab while it's working and it is empty. That is
 checkable in about a minute, and it is meant to be.
 
-**Counting how it's used:** there is one setting, off unless you switch it on, that sends a plain
-count of things like "the panel was shown." No amounts, no shop names, no web addresses, no
-identifier for you or your copy. Left off, it changes nothing about how any of this works.
+**Counting how it's used:** nothing is counted. No usage statistics, no event counts, no
+analytics. There is no setting for this, on or off — it is not a feature left switched off by
+default, it is not in the product. If that ever changes, it would arrive as a new thing you are
+asked about, in its own words, and not as a switch that turns itself on quietly.
 
 ## Installing
 
 **Once it's released:** from the Chrome Web Store, in Canada and the United States, for Chrome and
 Chromium-based browsers. The link goes here when there is one to link to.
 
-**From source:** there is no application code in this repository yet, so there is nothing to build
-today. When there is, the full steps live here — clone, install dependencies, run the build, then
-load the built folder through your browser's extensions page with developer mode switched on.
+**From source:** clone the repository, install dependencies with `npm ci`, run `npm run build`,
+then load the resulting `dist/` folder through your browser's extensions page with developer mode
+switched on.
 Releases will be tagged, and a clean build of a tag is meant to match the package published to the
 store byte for byte, so that anyone who wants to can check the two against each other.
 

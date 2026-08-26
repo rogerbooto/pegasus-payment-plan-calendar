@@ -129,6 +129,18 @@ describe("manifest — T18: host_permissions allowlist, no broad grants", () => 
     expect(findBroadGrants(permissions)).toEqual([]);
     expect(optionalHosts).not.toContain("<all_urls>");
   });
+
+  // Deliberately pinned, not just bounded: `permissions` is a MINIMUM-
+  // NECESSARY allowlist, not merely "nothing broad." `activeTab` used to be
+  // requested here with zero call sites anywhere in src/ for the API
+  // surface it grants (chrome.scripting / executeScript) -- an unused
+  // permission in the install prompt, on a codebase that enforces
+  // minimum-necessary capture everywhere else in storage/ledger.ts's
+  // allowlists. RED if `permissions` ever grows without a reviewer
+  // updating this exact array.
+  it("permissions is exactly [\"storage\"] -- no unreviewed addition (activeTab was removed: unused, grep-verified zero chrome.scripting/executeScript call sites)", () => {
+    expect(manifest["permissions"]).toEqual(["storage"]);
+  });
 });
 
 // ---------------------------------------------------------------------------

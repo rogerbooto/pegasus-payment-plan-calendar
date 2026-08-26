@@ -3,9 +3,14 @@
  * settings, the genuineness screen (src/overlay/ToolbarVerification.ts),
  * and the email invite link-out. This popup only ever opens from the
  * browser's own toolbar (declared as `action.default_popup` in the
- * manifest) — no page can make it appear and no page can put anything
- * inside it, which is exactly what makes it the one place genuineness
- * language and the Pegasus mention are allowed (T14, the design spec).
+ * manifest) or from the first-run welcome tab (src/welcome/welcome.ts,
+ * opened once on fresh install by the service worker) — no page can make
+ * it appear and no page can put anything inside it, which is exactly what
+ * makes it the one place genuineness language and the Pegasus mention are
+ * allowed (T14, the design spec). The welcome tab mounts this exact
+ * controller rather than a second copy of it, so the onboarding
+ * disclosure and the consent choice it writes have exactly one
+ * implementation regardless of which surface a first-run user lands on.
  *
  * T14: nothing in this file is a credential/PII input. The email invite is
  * a link-out (`window.open`/`chrome.tabs.create` to a static, developer-
@@ -37,6 +42,17 @@ export interface PopupAppDeps {
    * without needing a real, resolvable MARKETING_HOST checked into source.
    */
   readonly marketingHostConfigured?: boolean;
+  /**
+   * Set only by src/welcome/welcome.ts. Chrome does not pin a freshly
+   * installed extension's toolbar icon, and no extension API can force
+   * one — so a fresh install may have no other reachable route back to
+   * this onboarding screen than the welcome tab itself. When true, the
+   * onboarding screen adds one plain line telling the user where the icon
+   * lives. The toolbar popup itself never sets this: a user already
+   * looking at the toolbar popup has, by definition, already found the
+   * icon.
+   */
+  readonly showPinHint?: boolean;
 }
 
 type Screen = "hero" | "settings" | "verify" | "onboard" | "manual";
@@ -78,6 +94,7 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
       }
     });
   const marketingHostConfigured = deps.marketingHostConfigured ?? copy.MARKETING_HOST_CONFIGURED;
+  const showPinHint = deps.showPinHint ?? false;
 
   let screen: Screen = "hero";
 
@@ -232,11 +249,53 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
 
     const body = el("div", { className: "panel__body" });
 
+    // Backed by real state (checkoutReadingEnabled, src/storage/ledger.ts)
+    // -- see the comment on copy.SETTINGS_CHECKOUT_READING_LABEL for why
+    // this is not the same thing as the still-withheld "On this site" /
+    // "Everywhere" per-origin pair. Reading it fresh on every render (not
+    // threaded through as a prop) keeps this screen honest about
+    // whatever the content script will actually gate on next.
+    const settings = await ledger.readSettings();
+    const checkoutReadingEnabled = settings?.checkoutReadingEnabled ?? false;
+
+    const checkoutReadingRow = el("div", {
+      className: "popup__row",
+      children: [
+        el("div", {
+          className: "popup__row-text",
+          children: [
+            el("div", { text: copy.SETTINGS_CHECKOUT_READING_LABEL }),
+            el("div", { className: "popup__row-desc", text: copy.SETTINGS_CHECKOUT_READING_DESC }),
+          ],
+        }),
+        el("button", {
+          className: "switchbtn",
+          attrs: {
+            type: "button",
+            role: "switch",
+            "aria-checked": String(checkoutReadingEnabled),
+            "aria-label": copy.SETTINGS_CHECKOUT_READING_LABEL,
+          },
+          children: [
+            el("span", {
+              className: checkoutReadingEnabled ? "switch" : "switch switch--off",
+              attrs: { "aria-hidden": "true" },
+            }),
+          ],
+          on: {
+            click: () =>
+              void ledger.writeSettings({ checkoutReadingEnabled: !checkoutReadingEnabled }).then(render),
+          },
+        }),
+      ],
+    });
+
     const dataGroup = el("div", {
       className: "settings__group",
       children: [
         el("div", { className: "settings__h", text: copy.SETTINGS_GROUP_DATA }),
-        el("p", { className: "settings__note", attrs: { style: "margin-top:0" }, text: copy.SETTINGS_DATA_NOTE }),
+        checkoutReadingRow,
+        el("p", { className: "settings__note", text: copy.SETTINGS_DATA_NOTE }),
         el("div", {
           className: "actions",
           children: [
@@ -295,12 +354,14 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
     section.appendChild(el("h3", { attrs: { id: "ppc-onboard-h" }, text: copy.ONBOARD_TITLE }));
     section.appendChild(el("p", { text: copy.ONBOARD_BODY }));
 
-    // Visual-only "pick one" pair: neither button currently persists a
-    // page-reading preference anywhere a real detection decision reads
-    // from (there is no per-origin permission state to write it into yet
-    // — see copy.ts's note on the removed "On this site" / "Everywhere"
-    // switches). Continue always proceeds either way, matching
-    // ONBOARD_SKIP_NOTE's promise that both paths work identically.
+    // The real "pick one" pair: the chosen state is tracked here and is
+    // the ONE thing Continue below persists as checkoutReadingEnabled
+    // (storage/ledger.ts). `choice` starts at `null` -- "nothing picked
+    // yet" is a distinct state from either button, and Continue must not
+    // treat it as an implicit "yes" (see the click handler below for the
+    // Continue-without-choosing default).
+    let choice: boolean | null = null;
+
     const turnOnBtn = el("button", {
       className: "btn btn--primary",
       attrs: { type: "button", "aria-pressed": "false" },
@@ -308,6 +369,7 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
         el("span", {
           className: "btn__check",
           attrs: { "aria-hidden": "true" },
+          text: "✓",
         }),
         text(copy.ONBOARD_TURN_ON),
       ],
@@ -319,20 +381,26 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
         el("span", {
           className: "btn__check",
           attrs: { "aria-hidden": "true" },
+          text: "✓",
         }),
         text(copy.ONBOARD_NO_THANKS),
       ],
     });
     turnOnBtn.addEventListener("click", () => {
+      choice = true;
       turnOnBtn.setAttribute("aria-pressed", "true");
       noThanksBtn.setAttribute("aria-pressed", "false");
     });
     noThanksBtn.addEventListener("click", () => {
+      choice = false;
       noThanksBtn.setAttribute("aria-pressed", "true");
       turnOnBtn.setAttribute("aria-pressed", "false");
     });
     section.appendChild(el("div", { className: "actions", attrs: { "data-consent-pair": "" }, children: [turnOnBtn, noThanksBtn] }));
     section.appendChild(el("p", { className: "onboard__skipnote", text: copy.ONBOARD_SKIP_NOTE }));
+    if (showPinHint) {
+      section.appendChild(el("p", { className: "onboard__skipnote", text: copy.ONBOARD_PIN_HINT }));
+    }
 
     section.appendChild(
       el("div", {
@@ -345,12 +413,14 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
             text: copy.ONBOARD_CONTINUE,
             on: {
               click: () => {
-                // measurementEnabled stays false: the control that used to
-                // let onboarding set it true has been removed (no
-                // transport exists to consent to). See storage/ledger.ts's
-                // note on this field for why a stale persisted `true`
-                // from an older install must not be resurrected either.
-                void ledger.writeSettings({ measurementEnabled: false }).then(() => go("hero"));
+                // Continue persists whichever of the pair was chosen.
+                // Continue-without-choosing (choice still `null`) is
+                // treated as "No thanks", not as "Turn this on" -- the
+                // safe default is NOT reading checkout pages, made
+                // explicit here rather than left to fall out of whatever
+                // `Boolean(null)` happens to coerce to.
+                const checkoutReadingEnabled = choice === true;
+                void ledger.writeSettings({ checkoutReadingEnabled }).then(() => go("hero"));
               },
             },
           }),
@@ -366,8 +436,8 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
   }
 
   async function init(): Promise<void> {
-    const result = await store.get(["settings"]);
-    screen = result["settings"] ? "hero" : "onboard";
+    const settings = await ledger.readSettings();
+    screen = settings ? "hero" : "onboard";
     await render();
   }
 

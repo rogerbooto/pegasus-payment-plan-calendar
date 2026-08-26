@@ -40,7 +40,7 @@ const PLAN_FIELD_ALLOWLIST = [
   "firstPaymentDate",
 ] as const;
 
-const SETTINGS_FIELD_ALLOWLIST = ["measurementEnabled"] as const;
+const SETTINGS_FIELD_ALLOWLIST = ["checkoutReadingEnabled"] as const;
 
 /** The complete, closed field set of the usage-flags record (UI state only
  * — never a merchant/url/financial value, see FORBIDDEN_KEY_SUBSTRINGS
@@ -80,18 +80,43 @@ const CURRENCIES = ["CAD", "USD"] as const;
 const SOURCES = ["manual", "checkout_confirmed"] as const;
 
 /**
- * `measurementEnabled` is a legacy field. The UI control that wrote it (a
- * "count how often this is used" toggle) has been removed from the popup:
- * src/telemetry/sink.ts has zero call sites, so nothing was ever counted
- * or sent, and a control describing behaviour the product doesn't have is
- * a transparency failure. A persisted `true` from before that removal is
- * STALE, not consent — no future transport may read this field and start
- * sending on the strength of it. If measurement ever ships for real, it
- * needs its own new opt-in flag and its own onboarding/settings copy, not
- * a silent resurrection of this one.
+ * `measurementEnabled` (a "count how often this is used" flag) has been
+ * REMOVED from this schema, not just left unused. The UI control that
+ * wrote it was already removed from the popup before this — src/telemetry/
+ * sink.ts has zero call sites, so nothing was ever counted or sent — but
+ * the key itself kept sitting in storage, including a possible stale
+ * `true` on any record written before that removal. That is exactly the
+ * kind of thing this README-verifiable, open-the-devtools-and-look product
+ * cannot afford: a key named `measurementEnabled` that a user can find and
+ * that means nothing.
+ *
+ * `PlanLedger.readSettings()` below is the migration: any existing record
+ * carrying `measurementEnabled` (or any other now-unrecognized field) is
+ * re-validated against the CURRENT, closed SETTINGS_FIELD_ALLOWLIST and
+ * written back clean on the very next read — the stale field cannot
+ * survive a second read, and it is never displayed, counted, or used to
+ * gate anything on the way out. `validateSettings` below only ever
+ * accepts the current field set; it has no knowledge that
+ * `measurementEnabled` ever existed. If measurement ever ships for real,
+ * it needs its own new opt-in flag, its own onboarding/settings copy, and
+ * its own migration — never a resurrection of this name.
  */
 export interface Settings {
-  readonly measurementEnabled: boolean;
+  /**
+   * The user's first-run choice on whether checkout pages may be read at
+   * all (src/popup/PopupApp.ts's onboarding screen: "Turn this on" /
+   * "No thanks"), and the same choice the settings screen's "Read
+   * checkout pages" control shows and flips afterward. Positive polarity
+   * deliberately -- a `...Disabled` boolean inverts badly at every call
+   * site that guards on it. The content script
+   * (src/messaging/content-script.ts) is the reader that matters: it must
+   * treat anything other than a literal `true` (absent settings, an
+   * old/never-onboarded install, a malformed value) as "do not start" --
+   * never as consent by omission -- and must tear an already-running
+   * session down the moment this flips to `false` on an open tab
+   * (chrome.storage.onChanged), not merely stop starting new ones.
+   */
+  readonly checkoutReadingEnabled: boolean;
 }
 
 /** UI state for the popup's post-usefulness email-invite gate — never a
@@ -179,8 +204,8 @@ export function validateSettings(raw: unknown): Settings {
   }
   const record = raw as Record<string, unknown>;
   assertClosedFieldSet(record, SETTINGS_FIELD_ALLOWLIST, "settings");
-  if (typeof record.measurementEnabled !== "boolean") {
-    throw new StorageSchemaError("measurementEnabled must be a boolean");
+  if (typeof record.checkoutReadingEnabled !== "boolean") {
+    throw new StorageSchemaError("checkoutReadingEnabled must be a boolean");
   }
   return record as unknown as Settings;
 }
@@ -207,6 +232,23 @@ export function validateUsageFlags(raw: unknown): UsageFlags {
     throw new StorageSchemaError("inviteDismissed must be a boolean");
   }
   return record as unknown as UsageFlags;
+}
+
+/**
+ * True when a raw stored "settings" value already matches the current,
+ * closed schema exactly — no now-removed field (measurementEnabled or any
+ * future one), no missing field, right type. Used by
+ * `PlanLedger.readSettings()` to decide whether a migration write-back is
+ * actually needed, so an already-clean record isn't rewritten on every
+ * single read.
+ */
+function isAlreadyCleanSettingsRecord(record: Record<string, unknown>): boolean {
+  const keys = Object.keys(record);
+  return (
+    keys.length === SETTINGS_FIELD_ALLOWLIST.length &&
+    keys.every((k) => (SETTINGS_FIELD_ALLOWLIST as readonly string[]).includes(k)) &&
+    typeof record.checkoutReadingEnabled === "boolean"
+  );
 }
 
 /** The single validated writer over the storage seam. */
@@ -237,6 +279,32 @@ export class PlanLedger {
       schemaVersion: STORAGE_SCHEMA_VERSION,
       plans: existing.filter((p) => p.id !== id),
     });
+  }
+
+  /**
+   * Reads the "settings" key and migrates it in place if it carries a
+   * now-removed field (measurementEnabled) or is otherwise not shaped
+   * like the current schema -- the record is normalized to exactly
+   * SETTINGS_FIELD_ALLOWLIST and written back through this same validated
+   * writer so the stale field cannot resurface on a later read. Returns
+   * `null` only when "settings" has never been written at all (the
+   * never-onboarded case) -- that absence is meaningful (PopupApp.init()
+   * uses it to decide whether to show onboarding) and is never turned
+   * into a settings record of its own.
+   */
+  async readSettings(): Promise<Settings | null> {
+    const result = await this.store.get(["settings"]);
+    const raw = result["settings"];
+    if (raw === undefined) return null;
+
+    const record = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+    const checkoutReadingEnabled = record.checkoutReadingEnabled === true;
+    const settings = validateSettings({ checkoutReadingEnabled });
+
+    if (!isAlreadyCleanSettingsRecord(record)) {
+      await this.store.set({ settings });
+    }
+    return settings;
   }
 
   async writeSettings(raw: unknown): Promise<Settings> {

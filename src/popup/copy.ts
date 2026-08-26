@@ -29,6 +29,21 @@ export const OPEN_CALENDAR = "Open my calendar";
  * together, wired to real per-origin state, when that feature ships.
  */
 export const SETTINGS_GROUP_DATA = "Your data";
+
+/**
+ * Unlike the "On this site" / "Everywhere" pair withheld above, this
+ * control IS backed by real state: checkoutReadingEnabled
+ * (src/storage/ledger.ts), the same global boolean the first-run screen
+ * writes and src/messaging/content-script.ts gates on. It shows the
+ * current value and flips it through ledger.writeSettings -- do not
+ * confuse this with the withheld per-origin scope switch above; that one
+ * is still withheld because no per-origin state exists yet. This one
+ * clears that bar because the thing it claims to control is the thing
+ * that actually controls behaviour.
+ */
+export const SETTINGS_CHECKOUT_READING_LABEL = "Read checkout pages";
+export const SETTINGS_CHECKOUT_READING_DESC =
+  "When this is on, checkout pages you visit are read for an installment-plan option — the same thing the first-run screen offered. Turning it off stops that right away, on any page already open. It does not remove any plans you've already saved.";
 export const SETTINGS_DATA_NOTE = "You can delete everything stored here, any time, with the button below.";
 export const SETTINGS_DELETE_ALL = "Delete all my data";
 export const SETTINGS_GROUP_ABOUT = "About";
@@ -45,7 +60,7 @@ export const INVITE_NO_THANKS = "No thanks";
 export const ONBOARD_EYEBROW = "Before we start";
 export const ONBOARD_TITLE = "Payment Plan Calendar";
 export const ONBOARD_BODY =
-  "This looks at checkout pages you visit to spot an option to pay in installments. When it finds one, it reads four numbers — the order total, the number of payments, how often they're due, and the amount of each payment — and shows you those dates on a calendar next to plans you've already added. Everything stays on this device. Nothing is sent anywhere.";
+  "Until you turn this on, no checkout page is read. Once it's on, this looks at checkout pages you visit to spot an option to pay in installments. When it finds one, it reads four numbers — the order total, the number of payments, how often they're due, and the amount of each payment — and shows you those dates on a calendar next to plans you've already added. Everything stays on this device. Nothing is sent anywhere. You can turn it off again any time from Settings.";
 export const ONBOARD_TURN_ON = "Turn this on";
 export const ONBOARD_NO_THANKS = "No thanks";
 export const ONBOARD_SKIP_NOTE = "Either way, adding plans by hand and the calendar still work.";
@@ -59,6 +74,20 @@ export const ONBOARD_SKIP_NOTE = "Either way, adding plans by hand and the calen
  * actually does, alongside a real transport.
  */
 export const ONBOARD_CONTINUE = "Continue";
+
+/**
+ * Shown only on the first-run welcome tab (src/welcome/welcome.ts), not in
+ * the toolbar popup — see PopupAppDeps.showPinHint in PopupApp.ts. Chrome
+ * does not pin a freshly installed extension's icon to the toolbar, and no
+ * extension API can pin it on the extension's own behalf. This line says
+ * where the icon actually is; it deliberately does NOT promise a way back
+ * to this exact onboarding screen (there isn't one once settings exist —
+ * the toolbar icon opens the ordinary view after that), and instead points
+ * at Settings, where SETTINGS_CHECKOUT_READING_LABEL's control actually
+ * lives and can be changed again later.
+ */
+export const ONBOARD_PIN_HINT =
+  "To find this later, open your browser's extensions menu (the puzzle-piece icon in the toolbar) and pin this one to the toolbar. The choice above lives in Settings from then on, and you can change it there any time.";
 
 /**
  * The only two Pegasus-family URLs permitted anywhere in the bundle

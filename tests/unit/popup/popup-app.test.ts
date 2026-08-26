@@ -68,6 +68,77 @@ describe("PopupApp — first run gate", () => {
     expect(el2.querySelector('[data-consent-pair]')).toBeNull();
     expect(el2.textContent).toContain("Payment plan dates");
   });
+
+  // BUG 1 (launch-blocking): the consent choice used to be ignored
+  // entirely -- Continue always wrote measurementEnabled: false and
+  // nothing else, regardless of which button was clicked. These three
+  // cases pin the fix: whichever of the pair was picked is what persists,
+  // and picking neither defaults to the safe (not-reading) choice, never
+  // the enabling one.
+  it("'Turn this on' then Continue persists checkoutReadingEnabled: true", async () => {
+    const store = createFakeStore();
+    const el = root();
+    await createPopupApp(el, { store }).init();
+
+    const turnOnBtn = [...el.querySelectorAll("button")].find((b) => b.textContent?.includes("Turn this on")) as HTMLButtonElement;
+    turnOnBtn.click();
+    expect(turnOnBtn.getAttribute("aria-pressed")).toBe("true");
+
+    const continueBtn = [...el.querySelectorAll("button")].find((b) => b.textContent === "Continue") as HTMLButtonElement;
+    continueBtn.click();
+    await flush();
+
+    const settings = await store.get(["settings"]);
+    expect((settings.settings as { checkoutReadingEnabled: boolean }).checkoutReadingEnabled).toBe(true);
+  });
+
+  it("'No thanks' then Continue persists checkoutReadingEnabled: false", async () => {
+    const store = createFakeStore();
+    const el = root();
+    await createPopupApp(el, { store }).init();
+
+    const noThanksBtn = [...el.querySelectorAll('[data-consent-pair] button')].find((b) =>
+      b.textContent?.includes("No thanks"),
+    ) as HTMLButtonElement;
+    noThanksBtn.click();
+    expect(noThanksBtn.getAttribute("aria-pressed")).toBe("true");
+
+    const continueBtn = [...el.querySelectorAll("button")].find((b) => b.textContent === "Continue") as HTMLButtonElement;
+    continueBtn.click();
+    await flush();
+
+    const settings = await store.get(["settings"]);
+    expect((settings.settings as { checkoutReadingEnabled: boolean }).checkoutReadingEnabled).toBe(false);
+  });
+
+  // BUG 3: the .btn__check span used to have no glyph/content at all, so
+  // "selected" rendered as a blank 13px box (the visibility/layout half of
+  // this is covered by tests/unit/popup/theme.test.ts) -- but the DOM
+  // itself must actually carry a visible character for that box to ever
+  // show anything, on both buttons.
+  it("both onboarding buttons' check indicator carries real, visible content, not an empty span", async () => {
+    const el = root();
+    await createPopupApp(el, { store: createFakeStore() }).init();
+
+    const checks = [...el.querySelectorAll(".btn__check")];
+    expect(checks.length).toBe(2);
+    for (const check of checks) {
+      expect((check.textContent ?? "").trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it("Continue without picking either button defaults to checkoutReadingEnabled: false -- the safe, not-reading default, never an implicit yes", async () => {
+    const store = createFakeStore();
+    const el = root();
+    await createPopupApp(el, { store }).init();
+
+    const continueBtn = [...el.querySelectorAll("button")].find((b) => b.textContent === "Continue") as HTMLButtonElement;
+    continueBtn.click();
+    await flush();
+
+    const settings = await store.get(["settings"]);
+    expect((settings.settings as { checkoutReadingEnabled: boolean }).checkoutReadingEnabled).toBe(false);
+  });
 });
 
 describe("PopupApp — hero view", () => {
@@ -87,8 +158,8 @@ describe("PopupApp — hero view", () => {
     expect(el.querySelector(".summary")?.textContent).toContain("Your next 30 days:");
   });
 
-  it("renders no counting toggle, and no site-scope switches -- the controls this build does not implement never render at all", async () => {
-    const store = createFakeStore({ settings: { measurementEnabled: false } });
+  it("the hero screen renders no switch, and no counting/site-scope copy -- the controls this build does not implement never render there", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false } });
     const el = root();
     await createPopupApp(el, { store }).init();
 
@@ -96,10 +167,25 @@ describe("PopupApp — hero view", () => {
     expect(el.textContent).not.toContain("Count how often");
     expect(el.textContent).not.toContain("On this site");
     expect(el.textContent).not.toContain("Everywhere");
+  });
+
+  // Guardian review (2026-08-26): the settings screen used to offer no way
+  // to see or change checkoutReadingEnabled at all -- a consent switch
+  // with no off position. It now shows exactly one real switch (the
+  // checkout-reading control), and still nothing for the two controls
+  // this build genuinely does not implement (usage counting, per-origin
+  // site scope).
+  it("the settings screen renders exactly one real switch (checkout-reading), and still no counting/site-scope copy", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false } });
+    const el = root();
+    await createPopupApp(el, { store }).init();
 
     (el.querySelector('[aria-label="Settings"]') as HTMLButtonElement).click();
     await flush();
-    expect(el.querySelectorAll('[role="switch"]').length).toBe(0);
+
+    const switches = el.querySelectorAll('[role="switch"]');
+    expect(switches.length).toBe(1);
+    expect(switches[0]?.getAttribute("aria-label")).toBe("Read checkout pages");
     expect(el.textContent).not.toContain("Count how often");
     expect(el.textContent).not.toContain("On this site");
     expect(el.textContent).not.toContain("Everywhere");
@@ -109,13 +195,86 @@ describe("PopupApp — hero view", () => {
     expect(el.textContent).toContain("Delete all my data");
   });
 
-  it("a stale persisted measurementEnabled: true from before the toggle was removed is never surfaced as an active control", async () => {
+  it("a stale persisted measurementEnabled: true from before that toggle was removed is migrated away and never surfaced as an active control on the hero screen", async () => {
     const store = createFakeStore({ settings: { measurementEnabled: true } });
     const el = root();
     await createPopupApp(el, { store }).init();
 
     expect(el.querySelectorAll('[role="switch"]').length).toBe(0);
     expect(el.textContent).not.toContain("Count how often");
+
+    // The migration (PlanLedger.readSettings()) ran during init() and
+    // wrote the cleaned record back -- measurementEnabled cannot be read
+    // back from storage after this.
+    const settings = await store.get(["settings"]);
+    expect((settings.settings as Record<string, unknown>).measurementEnabled).toBeUndefined();
+    expect((settings.settings as Record<string, unknown>).checkoutReadingEnabled).toBe(false);
+  });
+});
+
+describe("PopupApp — the Settings consent toggle actually flips the stored value (guardian review 2026-08-26, item 1)", () => {
+  function findCheckoutReadingSwitch(el: HTMLElement): HTMLButtonElement {
+    return [...el.querySelectorAll('[role="switch"]')].find(
+      (b) => b.getAttribute("aria-label") === "Read checkout pages",
+    ) as HTMLButtonElement;
+  }
+
+  it("shows the current OFF state, and clicking it writes checkoutReadingEnabled: true through ledger.writeSettings", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false } });
+    const el = root();
+    await createPopupApp(el, { store }).init();
+
+    (el.querySelector('[aria-label="Settings"]') as HTMLButtonElement).click();
+    await flush();
+
+    const toggle = findCheckoutReadingSwitch(el);
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+
+    toggle.click();
+    await flush();
+
+    const settings = await store.get(["settings"]);
+    expect((settings.settings as { checkoutReadingEnabled: boolean }).checkoutReadingEnabled).toBe(true);
+    // RED if the click stops re-rendering the real, current value.
+    const toggleAfter = findCheckoutReadingSwitch(el);
+    expect(toggleAfter.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("shows the current ON state, and clicking it writes checkoutReadingEnabled: false -- revocation from Settings, not just deletion", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: true }, plans: [samplePlan()] });
+    const el = root();
+    await createPopupApp(el, { store }).init();
+
+    (el.querySelector('[aria-label="Settings"]') as HTMLButtonElement).click();
+    await flush();
+
+    const toggle = findCheckoutReadingSwitch(el);
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+
+    toggle.click();
+    await flush();
+
+    const settings = await store.get(["settings"]);
+    expect((settings.settings as { checkoutReadingEnabled: boolean }).checkoutReadingEnabled).toBe(false);
+  });
+
+  // Item 3: revoking must NOT require deleting plans. Granting was two
+  // clicks; withdrawing used to mean "Delete all my data" or nothing --
+  // that asymmetry is the dark pattern the guardian flagged. The toggle
+  // must be a clean, separate action from deletion.
+  it("turning the toggle off does not touch any saved plan -- revoking consent and deleting data are two separate, honestly-labeled actions", async () => {
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: true }, plans: [samplePlan()] });
+    const el = root();
+    await createPopupApp(el, { store }).init();
+
+    (el.querySelector('[aria-label="Settings"]') as HTMLButtonElement).click();
+    await flush();
+    findCheckoutReadingSwitch(el).click();
+    await flush();
+
+    const stored = await store.get(["plans", "settings"]);
+    expect((stored.plans as unknown[]).length).toBe(1);
+    expect((stored.settings as { checkoutReadingEnabled: boolean }).checkoutReadingEnabled).toBe(false);
   });
 });
 

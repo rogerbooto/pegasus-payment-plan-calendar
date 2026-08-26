@@ -7,6 +7,7 @@ import {
   validateSettings,
   validateUsageFlags,
 } from "../../src/storage/ledger";
+import type { Settings } from "../../src/storage/ledger";
 import type { KeyValueStore } from "../../src/storage/store";
 import { StorageSchemaError } from "../../src/shared/errors";
 
@@ -88,12 +89,114 @@ describe("plan record allowlist", () => {
 
 describe("settings allowlist", () => {
   it("accepts the closed settings record", () => {
-    expect(validateSettings({ measurementEnabled: false }).measurementEnabled).toBe(false);
+    const settings = validateSettings({ checkoutReadingEnabled: true });
+    expect(settings.checkoutReadingEnabled).toBe(true);
   });
 
   it("rejects unknown settings keys", () => {
-    expect(() => validateSettings({ measurementEnabled: false, extra: 1 })).toThrow(
+    expect(() => validateSettings({ checkoutReadingEnabled: false, extra: 1 })).toThrow(StorageSchemaError);
+  });
+
+  // measurementEnabled was REMOVED from the schema (guardian review,
+  // 2026-08-26): a key sitting in storage that means nothing is the one
+  // verification-friendly claim in this product's own README that fails
+  // verification. RED if it is ever re-admitted to the allowlist without
+  // a real, live control and copy behind it.
+  it("measurementEnabled is no longer part of the schema at all -- present alongside a valid checkoutReadingEnabled, it is rejected as a non-allowlisted field, not silently accepted or ignored", () => {
+    expect(() => validateSettings({ checkoutReadingEnabled: true, measurementEnabled: false })).toThrow(
       StorageSchemaError,);
+    expect(() => validateSettings({ checkoutReadingEnabled: true, measurementEnabled: false })).toThrow(
+      /non-allowlisted field/,);
+  });
+
+  // The bug this field exists to fix (BUG 1): the consent choice used to be
+  // discarded entirely (Continue always wrote measurementEnabled: false and
+  // nothing else). checkoutReadingEnabled is the field that now carries
+  // that choice, and is also the field the Settings-screen toggle reads
+  // and flips -- RED if it is ever removed from the allowlist/validator,
+  // or if it stops being required.
+  it("admits checkoutReadingEnabled -- true and false are both valid, and it is required (missing => rejected)", () => {
+    expect(validateSettings({ checkoutReadingEnabled: true }).checkoutReadingEnabled).toBe(true);
+    expect(validateSettings({ checkoutReadingEnabled: false }).checkoutReadingEnabled).toBe(false);
+    expect(() => validateSettings({})).toThrow(StorageSchemaError);
+    expect(() => validateSettings({ checkoutReadingEnabled: "yes" })).toThrow(StorageSchemaError);
+  });
+
+  // Regression risk called out explicitly: adding a field to the SETTINGS
+  // allowlist must never widen the separate, 9-field PLAN allowlist. Proven
+  // behaviourally (validatePlanRecord's field set is private) rather than
+  // by exporting it just for this test: a plan record is still rejected
+  // for carrying checkoutReadingEnabled, and the known-good plan record
+  // (all 9 plan fields, none of them a settings field) still validates.
+  it("checkoutReadingEnabled is a SETTINGS field only -- the plan record allowlist did not grow to admit it", () => {
+    expect(() => validatePlanRecord({ ...validPlan, checkoutReadingEnabled: true })).toThrow(StorageSchemaError);
+    expect(() => validatePlanRecord({ ...validPlan, checkoutReadingEnabled: true })).toThrow(/non-allowlisted field/);
+    // The unmodified 9-field plan record still validates on its own --
+    // proof the plan schema itself was untouched by this change.
+    expect(validatePlanRecord(validPlan).id).toBe(validPlan.id);
+    expect(Object.keys(validPlan)).toHaveLength(9);
+  });
+});
+
+describe("PlanLedger.readSettings() -- the measurementEnabled removal migration (item 7, guardian review 2026-08-26)", () => {
+  it("returns null when settings has never been written -- never-onboarded stays never-onboarded, no record is invented", async () => {
+    const store = memoryStore();
+    const ledger = new PlanLedger(store);
+    expect(await ledger.readSettings()).toBeNull();
+    expect(store.data.settings).toBeUndefined();
+  });
+
+  it("an already-clean record (checkoutReadingEnabled only) round-trips without a rewrite", async () => {
+    const store = memoryStore();
+    store.data.settings = { checkoutReadingEnabled: true };
+    const ledger = new PlanLedger(store);
+    const settings = (await ledger.readSettings()) as Settings;
+    expect(settings.checkoutReadingEnabled).toBe(true);
+    // Still exactly the same shape -- no stray field appeared.
+    expect(Object.keys(store.data.settings as object)).toEqual(["checkoutReadingEnabled"]);
+  });
+
+  // The migration itself: an old record still carrying measurementEnabled
+  // (possibly `true`, from before the toggle that wrote it was removed
+  // from the popup) must not survive a read. RED if this field is ever
+  // readable from storage again after this test's own store has been read
+  // once through the ledger.
+  it("strips a legacy measurementEnabled: true from an old record on read, and persists the cleaned record", async () => {
+    const store = memoryStore();
+    store.data.settings = { measurementEnabled: true, checkoutReadingEnabled: false };
+    const ledger = new PlanLedger(store);
+
+    const settings = (await ledger.readSettings()) as Settings;
+    expect(settings.checkoutReadingEnabled).toBe(false);
+    expect((settings as unknown as Record<string, unknown>).measurementEnabled).toBeUndefined();
+
+    // The migration WROTE BACK the cleaned record -- not just returned a
+    // cleaned view of a still-dirty store. A second, independent read
+    // must see it gone too.
+    expect(store.data.settings).toEqual({ checkoutReadingEnabled: false });
+    const secondLedger = new PlanLedger(store);
+    const secondRead = (await secondLedger.readSettings()) as Settings;
+    expect((secondRead as unknown as Record<string, unknown>).measurementEnabled).toBeUndefined();
+  });
+
+  it("a record with measurementEnabled but no checkoutReadingEnabled at all (a genuinely ancient install) migrates to the safe, not-reading default -- never an implicit yes", async () => {
+    const store = memoryStore();
+    store.data.settings = { measurementEnabled: true };
+    const ledger = new PlanLedger(store);
+
+    const settings = (await ledger.readSettings()) as Settings;
+    expect(settings.checkoutReadingEnabled).toBe(false);
+    expect(store.data.settings).toEqual({ checkoutReadingEnabled: false });
+  });
+
+  it("a malformed (non-object) settings value migrates to the safe default rather than throwing", async () => {
+    const store = memoryStore();
+    store.data.settings = "not-an-object";
+    const ledger = new PlanLedger(store);
+
+    const settings = (await ledger.readSettings()) as Settings;
+    expect(settings.checkoutReadingEnabled).toBe(false);
+    expect(store.data.settings).toEqual({ checkoutReadingEnabled: false });
   });
 });
 

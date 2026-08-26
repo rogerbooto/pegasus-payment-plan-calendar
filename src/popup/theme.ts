@@ -7,11 +7,30 @@
  * screen. The popup is a normal extension page (not a shadow root), but it
  * is still built exclusively with createElement/textContent (T04) — this
  * string is CSS text, assigned via textContent, never parsed as markup.
+ *
+ * OVERLAY_CSS's design tokens (--gold, --text, --border, --focus, ...) are
+ * declared only on `:host`, which is meaningful inside the overlay's
+ * shadow root and matches NOTHING in a normal document like this popup —
+ * every var() in OVERLAY_CSS would otherwise resolve to nothing here (no
+ * fallback on most of them), rendering e.g. `.btn--primary` as a
+ * transparent, textless-looking button. The block below re-declares the
+ * exact same LIGHT_TOKENS/DARK_TOKENS constants on `:root`, which DOES
+ * apply in a normal document, so every token resolves identically in both
+ * contexts without a second, hand-copied set of colour values.
  */
-import { OVERLAY_CSS } from "../overlay/theme";
+import { OVERLAY_CSS, LIGHT_TOKENS, DARK_TOKENS } from "../overlay/theme";
 
 export const POPUP_CSS = `
 ${OVERLAY_CSS}
+
+:root {
+  ${LIGHT_TOKENS}
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    ${DARK_TOKENS}
+  }
+}
 
 html, body {
   font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -60,7 +79,30 @@ html, body {
 .onboard__block { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
 .onboard__block h4 { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
 .onboard__row { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
-.btn__check { display: none; width: 13px; height: 13px; margin-right: 6px; }
-.btn[aria-pressed="true"] .btn__check { display: inline-flex; }
+/*
+ * The check glyph's box (width + margin) is reserved at ALL times, pressed
+ * or not -- only visibility toggles. Letting display flip between none
+ * and inline-flex (the previous rule) removed the box entirely in the
+ * unpressed state, so pressing a button shoved its label sideways by the
+ * box's own width + margin. visibility: hidden keeps the box (and the
+ * label's position) identical in both states; only the glyph's own paint
+ * toggles. color: currentColor means the glyph always matches whichever
+ * button variant it's inside (btn--primary's --btn-ink, btn--ghost's
+ * --text) without a second, hardcoded colour.
+ */
+.btn__check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  margin-right: 6px;
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1;
+  color: currentColor;
+  visibility: hidden;
+}
+.btn[aria-pressed="true"] .btn__check { visibility: visible; }
 .btn[aria-pressed="true"] { box-shadow: 0 0 0 4px var(--focus); }
 `;

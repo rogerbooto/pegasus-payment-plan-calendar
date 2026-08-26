@@ -8,6 +8,7 @@ await build({
     "content-script": "src/messaging/content-script.ts",
     "service-worker": "src/messaging/service-worker.ts",
     popup: "src/popup/popup.ts",
+    welcome: "src/welcome/welcome.ts",
   },
   bundle: true,
   format: "iife",
@@ -21,6 +22,7 @@ await build({
 await mkdir("dist", { recursive: true });
 await copyFile("src/manifest.json", "dist/manifest.json");
 await copyFile("src/popup/popup.html", "dist/popup.html");
+await copyFile("src/welcome/welcome.html", "dist/welcome.html");
 
 // Toolbar/store icons. Derived from the Pegasus mark; see the trademark note in
 // README — the code is GPL-3.0, the marks are not covered by that grant.

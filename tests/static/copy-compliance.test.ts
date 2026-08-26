@@ -331,6 +331,17 @@ async function collectAllRenderedCopy(): Promise<string[]> {
     collected.push(...collectUserFacingStrings(root));
     void app;
   }
+  // --- src/welcome/welcome.ts mounts this exact same onboarding screen
+  // with showPinHint: true (the one extra line, ONBOARD_PIN_HINT, telling
+  // a fresh install where the toolbar icon lives) -- covered here rather
+  // than in a second, duplicated copy-compliance file for that surface.
+  {
+    const store = memoryStore();
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    await createPopupApp(root, { store, showPinHint: true }).init();
+    collected.push(...collectUserFacingStrings(root));
+  }
   {
     const store = memoryStore({ settings: { measurementEnabled: false } });
     const root = document.createElement("div");

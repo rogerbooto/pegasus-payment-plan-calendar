@@ -4,8 +4,7 @@
   "version": "0.1.0",
   "description": "Shows the payment dates an installment plan would add, beside the plans you already entered. Everything stays on this device.",
   "permissions": [
-    "storage",
-    "activeTab"
+    "storage"
   ],
   "host_permissions": [
     "https://checkout.shopify.com/*",
