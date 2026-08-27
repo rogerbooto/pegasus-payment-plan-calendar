@@ -25,7 +25,7 @@
  * exceptions noted at their call sites below (manual entry keeps its own
  * field focus; the post-add hero focuses the status line instead).
  */
-import type { IsoDate, PaymentPlanRecord } from "../shared/types";
+import type { PaymentPlanRecord } from "../shared/types";
 import { formatCents } from "../shared/format";
 import { addCents, type Cents, ZERO_CENTS } from "../shared/money";
 import { PlanNotFoundError } from "../shared/errors";
@@ -34,11 +34,12 @@ import { chromeLocalStore, type KeyValueStore } from "../storage/store";
 import { paymentDates } from "../impact/engine";
 import { renderEditPlanSheet, renderManualEntrySheet, type EditChangeSummary } from "../overlay/ConfirmationSheet";
 import { renderToolbarVerification } from "../overlay/ToolbarVerification";
+import { buildPlanListNotice, buildPlanRows, type PlanListNotice } from "../overlay/PlanList";
 import { buildConsentSwitchRow } from "./ConsentSwitch";
 import { buildThemeChoiceGroup } from "./ThemeChoice";
-import { el, clear, moveFocusToHeading, text, tokenList } from "../overlay/dom";
+import { el, clear, moveFocusToHeading, text } from "../overlay/dom";
 import { applyThemeAttribute } from "../overlay/theme";
-import { formatMonthDay, formatWeekday, todayIsoDate } from "../overlay/format-helpers";
+import { todayIsoDate } from "../overlay/format-helpers";
 import * as overlayCopy from "../overlay/copy";
 import * as copy from "./copy";
 import { markInviteDismissed, markViewedNext30, readUsageFlags } from "./usage-tracking";
@@ -86,23 +87,16 @@ type Screen = "hero" | "settings" | "verify" | "onboard" | "manual" | "edit";
  * must never all be true together. `"removed"` is not part of the spec's
  * own table — it exists because the founder chose per-row Remove (§11.1's
  * caveat, revisited): it needs an undo the other outcomes don't, for the
- * same reason the overlay's existing REMOVED_STATUS/REMOVED_UNDO pair does
- * (the numbers vanish from the screen, unlike an edit).
+ * same reason REMOVED_STATUS/REMOVED_UNDO does (the numbers vanish from
+ * the screen, unlike an edit). Now `src/overlay/PlanList.ts`'s own
+ * `PlanListNotice` -- the overlay's "Plans you've entered" tab shows the
+ * identical notice for the identical outcomes, so one type (and one
+ * renderer, `buildPlanListNotice`) covers both surfaces rather than two
+ * that could drift apart.
  */
-type HeroNotice =
-  | { readonly kind: "added" }
-  | { readonly kind: "edited"; readonly dates: readonly IsoDate[] | null }
-  | { readonly kind: "unchanged" }
-  | { readonly kind: "gone" }
-  | { readonly kind: "removed"; readonly plan: PaymentPlanRecord };
+type HeroNotice = PlanListNotice;
 
 const NEXT30_WINDOW_DAYS = 29;
-
-/** §3.3 — date-ordered, ties keep storage order (Array#sort is stable). */
-function sortedPlans(plans: readonly PaymentPlanRecord[]): readonly PaymentPlanRecord[] {
-  return [...plans].sort((a, b) =>
-    a.firstPaymentDate < b.firstPaymentDate ? -1 : a.firstPaymentDate > b.firstPaymentDate ? 1 : 0,);
-}
 
 function addDaysIso(date: string, days: number): string {
   const [y, m, d] = date.split("-").map((s) => parseInt(s, 10));
@@ -304,7 +298,7 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
 
     let noticeEl: HTMLElement | null = null;
     if (notice) {
-      noticeEl = buildHeroNotice(notice);
+      noticeEl = buildPlanListNotice(notice, (plan, button) => void handleUndoRemove(plan, button));
       body.appendChild(noticeEl);
     }
 
@@ -322,12 +316,11 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
       // §3 (edit-plan-spec) -- the drill-down under the summary: one row
       // per saved plan, the only surface any saved plan is individually
       // addressable from. §3.5: no heading and no list at zero plans.
+      // Row rendering itself lives in src/overlay/PlanList.ts (shared with
+      // the overlay's own "Plans you've entered" tab) so the two surfaces
+      // can never drift into two different row layouts.
       body.appendChild(el("h3", { className: "settings__h", text: overlayCopy.PLANS_LIST_HEADING }));
-      const rows = el("ul", { className: "rows" });
-      for (const plan of sortedPlans(plans)) {
-        rows.appendChild(buildPlanRow(plan));
-      }
-      body.appendChild(rows);
+      body.appendChild(buildPlanRows(plans, { onEdit: openEdit, onRemove: (plan, button) => void handleRemove(plan, button) }));
     }
 
     // §2.2/§2.5 -- tab-only, on every hero state, directly above the
@@ -400,90 +393,11 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
     }
   }
 
-  /**
-   * §5.3/§5.4 -- the four spec'd outcomes plus the founder-added "removed"
-   * one. `.status--text` (edit-plan-spec §5.4 CSS) opts the text-only
-   * outcomes out of `.status`'s own flex/gap layout, which exists for the
-   * text-plus-link shape "added" and "removed" still use.
-   */
-  function buildHeroNotice(notice: HeroNotice): HTMLElement {
-    if (notice.kind === "added") {
-      return el("p", { className: "status", attrs: { role: "status", tabindex: "-1" }, text: overlayCopy.SAVED_STATUS });
-    }
-    if (notice.kind === "edited") {
-      if (notice.dates) {
-        return el("p", {
-          className: "status status--text",
-          attrs: { role: "status", tabindex: "-1" },
-          children: [text(`${overlayCopy.EDIT_SAVED_DATES} `), ...tokenList(notice.dates.map((d) => formatMonthDay(d)))],
-        });
-      }
-      return el("p", {
-        className: "status status--text",
-        attrs: { role: "status", tabindex: "-1" },
-        text: overlayCopy.EDIT_SAVED_NO_DATE_CHANGE,
-      });
-    }
-    if (notice.kind === "unchanged") {
-      return el("p", { className: "status status--text", attrs: { role: "status", tabindex: "-1" }, text: overlayCopy.EDIT_NO_CHANGE });
-    }
-    if (notice.kind === "gone") {
-      return el("p", { className: "status status--text", attrs: { role: "status", tabindex: "-1" }, text: overlayCopy.EDIT_TARGET_GONE });
-    }
-    // notice.kind === "removed" -- the one outcome that gets an undo
-    // (§11.1 revisited, and §5.2's own reasoning for why edit does not):
-    // the numbers are gone from the screen, so a mis-click cannot be
-    // corrected in place the way an edit's list-still-shows-everything
-    // property allows.
-    const undoBtn = el("button", { className: "btn btn--link", attrs: { type: "button" }, text: overlayCopy.REMOVED_UNDO });
-    undoBtn.addEventListener("click", () => void handleUndoRemove(notice.plan, undoBtn));
-    return el("p", {
-      className: "status",
-      attrs: { role: "status", tabindex: "-1" },
-      children: [text(overlayCopy.REMOVED_STATUS), undoBtn],
-    });
-  }
-
-  /**
-   * §3.2 row anatomy, plus the founder-added Remove control (§3.4's
-   * disambiguation pattern extended to it: the row's own
-   * editRowLabelSuffix() suffix is shared by both buttons, since it never
-   * names which action it is attached to).
-   */
-  function buildPlanRow(plan: PaymentPlanRecord): HTMLLIElement {
-    const dateText = formatMonthDay(plan.firstPaymentDate);
-    const eachText = formatCents(plan.perInstallmentCents, plan.currency);
-    const totalText = formatCents(plan.orderTotalCents, plan.currency);
-    const suffix = overlayCopy.editRowLabelSuffix(dateText, eachText);
-
-    const editBtn = el("button", {
-      className: "btn btn--link",
-      attrs: { type: "button" },
-      children: [text(overlayCopy.EDIT_ACTION_SHORT), el("span", { className: "sr-only", text: suffix })],
-    });
-    editBtn.addEventListener("click", () => openEdit(plan));
-
-    const removeBtn = el("button", {
-      className: "btn btn--link",
-      attrs: { type: "button" },
-      children: [text(overlayCopy.REMOVE_ACTION_SHORT), el("span", { className: "sr-only", text: suffix })],
-    });
-    removeBtn.addEventListener("click", () => void handleRemove(plan, removeBtn));
-
-    return el("li", {
-      children: [
-        el("span", { className: "date", text: dateText }),
-        el("span", { className: "dow", text: formatWeekday(plan.firstPaymentDate) }),
-        el("span", { className: "amt", text: eachText }),
-        editBtn,
-        removeBtn,
-        el("span", {
-          className: "sub",
-          text: overlayCopy.planRowSummary(plan.installmentCount, overlayCopy.CADENCE_OPTION_LABELS[plan.cadence], totalText),
-        }),
-      ],
-    });
-  }
+  // buildHeroNotice/buildPlanRow used to live here, one per surface. Both
+  // now come from src/overlay/PlanList.ts -- the shared implementation
+  // this popup and the overlay's "Plans you've entered" tab both call, so
+  // the row markup and the outcome notice can never drift into two
+  // different shapes (see PlanList.ts's own module doc for why).
 
   function openEdit(plan: PaymentPlanRecord): void {
     editingPlan = plan;

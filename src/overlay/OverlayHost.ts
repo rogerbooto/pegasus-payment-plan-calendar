@@ -23,14 +23,16 @@ import { addCents, type Cents, ZERO_CENTS } from "../shared/money";
 import { OVERLAY_HOST_TAG } from "../shared/constants";
 import { PlanLedger } from "../storage/ledger";
 import { chromeLocalStore, type KeyValueStore } from "../storage/store";
+import { PlanNotFoundError } from "../shared/errors";
 import { markViewedNext30 } from "../popup/usage-tracking";
 import { computeImpact, paymentDates, type ImpactView } from "../impact/engine";
 import { confirmPlan, type ConfirmedPlanInput } from "../parser/confirmation";
 import { createDomPageProbe } from "../engine/dom-page-probe";
 import { extractionCore } from "../engine/extraction-core";
 import { readOrderTotalSuggestion } from "../engine/order-total-suggestion";
-import { renderConfirmationSheet, renderManualEntrySheet } from "./ConfirmationSheet";
-import { el, clear, text, styleTag, tokenList } from "./dom";
+import { renderConfirmationSheet, renderManualEntrySheet, renderEditPlanSheet, type EditChangeSummary } from "./ConfirmationSheet";
+import { buildPlanListNotice, buildPlanRows, type PlanListNotice } from "./PlanList";
+import { el, clear, moveFocusToHeading, text, styleTag, tokenList } from "./dom";
 import { applyThemeAttribute, OVERLAY_CSS, resolvePersistedTheme } from "./theme";
 import { formatMonthDay, formatWeekday, todayIsoDate } from "./format-helpers";
 import * as copy from "./copy";
@@ -54,15 +56,28 @@ export interface OverlayHostDeps {
 const COLLAPSE_BREAKPOINT_PX = 600;
 const NEXT30_WINDOW_DAYS = 29; // 30 calendar days inclusive of today
 
-type Tab = "plan" | "next30";
+type Tab = "plan" | "next30" | "plans";
 
+/**
+ * `"saved"`/`"removed"` used to be their own Screen kinds, each hijacking
+ * the whole panel body regardless of which tab was selected — the exact
+ * root cause of the tab strip's F3 defect (a tab that looks right and
+ * switches nothing). Both retire into `"plans"` here: a screen that
+ * participates in the SAME tab dispatch as `"impact"` rather than
+ * outranking it, paired with `planNotice` (below) for the one-shot
+ * "Added."/"Removed."/etc. announcement. `"edit"` is new — editing an
+ * existing plan gets its own full-screen form, exactly like `"confirm"`/
+ * `"manual"`, with the tab strip hidden (a tab strip behind an open form
+ * would either do nothing while typing — a second F3 — or silently
+ * discard unsaved input, and neither is acceptable).
+ */
 type Screen =
   | { readonly kind: "impact" }
   | { readonly kind: "confirm" }
   | { readonly kind: "manual" }
+  | { readonly kind: "edit" }
   | { readonly kind: "not_recognized" }
-  | { readonly kind: "saved"; readonly plan: PaymentPlanRecord }
-  | { readonly kind: "removed"; readonly plan: PaymentPlanRecord };
+  | { readonly kind: "plans" };
 
 function candidateToRecordPreview(state: Extract<EngineState, { kind: "PARSED_CONFIRMABLE" }>, today: IsoDate): {
   readonly preview: PaymentPlanRecord;
@@ -216,6 +231,25 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
   // (never re-read on a later "Add a plan" click for the same state) --
   // see readOrderTotalSuggestionOnce below.
   let orderTotalSuggestion: OrderTotalSuggestion | null | undefined;
+  /** Set only alongside `screen = {kind:"edit"}` (via openEdit below);
+   * read only by the "edit" branch of populateBody. Mirrors the popup's
+   * own `editingPlan` (src/popup/PopupApp.ts). */
+  let editingPlan: PaymentPlanRecord | null = null;
+  /**
+   * The plans-tab's own transient notice (mirrors the popup's
+   * `heroNotice`): consumed exactly once, by the very next render of the
+   * "plans" tab content, then cleared — see renderPlansTabBody. Never
+   * touches storage, so it cannot resurrect after a later mount().
+   */
+  let planNotice: PlanListNotice | null = null;
+  /**
+   * Set by cancelForm() before restoring `previousScreen`: render() does
+   * `clear(root)` on every call, which drops focus with nothing to catch
+   * it. Consumed exactly once, from inside populateBody, once the
+   * restored screen's content has actually finished rendering (several
+   * branches read the ledger first) — see populateBody's own wrapper.
+   */
+  let focusTitleOnNextRender = false;
 
   function ensureHost(): ShadowRoot {
     if (host && shadow) return shadow;
@@ -287,32 +321,93 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
     render();
   }
 
+  /**
+   * §7 -- Cancel/Escape from any open form returns to whatever screen was
+   * active before it opened. `render()` always does `clear(root)`, which
+   * drops focus with nothing to catch it (there was no focus management
+   * on this transition at all before); `focusTitleOnNextRender` hands the
+   * panel's own heading to the restored screen once its content is
+   * actually in the DOM -- see populateBody's wrapper.
+   */
   function cancelForm(): void {
+    editingPlan = null;
     if (previousScreen) {
       screen = previousScreen;
       previousScreen = null;
+      focusTitleOnNextRender = true;
       render();
     } else {
       dismiss();
     }
   }
 
+  /** Lands on the plans tab after any add/edit/remove/undo, with `notice`
+   * as the one-shot announcement `renderPlansTabBody` shows and then
+   * clears. The single funnel every one of those five actions uses --
+   * see the type comment on `Screen` for why this replaced two Screen
+   * kinds that used to bypass the tab dispatch entirely (F3). */
+  function landOnPlansTab(notice: PlanListNotice): void {
+    editingPlan = null;
+    previousScreen = null;
+    planNotice = notice;
+    tab = "plans";
+    screen = { kind: "plans" };
+    render();
+  }
+
   async function handleConfirm(record: PaymentPlanRecord): Promise<void> {
     await ledger.addPlan(record);
-    screen = { kind: "saved", plan: record };
+    landOnPlansTab({ kind: "added" });
+  }
+
+  function openEdit(plan: PaymentPlanRecord): void {
+    previousScreen = screen;
+    editingPlan = plan;
+    screen = { kind: "edit" };
     render();
   }
 
-  async function handleRemove(plan: PaymentPlanRecord): Promise<void> {
+  /** §5.3 -- the four spec'd outcomes for an edit, mirroring the popup's
+   * own "edit" screen (src/popup/PopupApp.ts) move for move: a no-op save
+   * writes nothing (and keeps `source` for free), a vanished target
+   * writes nothing either, and only an actual value change ever calls
+   * `updatePlan`. */
+  async function handlePlanEditSave(updated: PaymentPlanRecord, changed: EditChangeSummary): Promise<void> {
+    if (!changed.valuesChanged) {
+      landOnPlansTab({ kind: "unchanged" });
+      return;
+    }
+    let saved: PaymentPlanRecord;
+    try {
+      saved = await ledger.updatePlan(updated);
+    } catch (err) {
+      if (err instanceof PlanNotFoundError) {
+        landOnPlansTab({ kind: "gone" });
+        return;
+      }
+      throw err;
+    }
+    landOnPlansTab({ kind: "edited", dates: changed.datesChanged ? paymentDates(saved) : null });
+  }
+
+  /** Per-row Remove (founder-decided, §11.1 revisited): stays on the
+   * plans tab and drops just this row, rather than the old top-level
+   * "removed" screen's single-line dead end (no footer nav, no way back
+   * except its own undo) -- removing one plan out of five must not blow
+   * away the other four. Disabling the pressed button is defensive, not
+   * load-bearing: removePlan's filter-by-id is naturally idempotent. */
+  async function handlePlanRemove(plan: PaymentPlanRecord, button: HTMLButtonElement): Promise<void> {
+    button.disabled = true;
     await ledger.removePlan(plan.id);
-    screen = { kind: "removed", plan };
-    render();
+    landOnPlansTab({ kind: "removed", plan });
   }
 
-  async function handleReAdd(plan: PaymentPlanRecord): Promise<void> {
+  /** "Add it back" -- reuses addPlan with the SAME record (same id),
+   * exactly like the pre-existing REMOVED_UNDO flow this generalizes. */
+  async function handlePlanUndoRemove(plan: PaymentPlanRecord, button: HTMLButtonElement): Promise<void> {
+    button.disabled = true;
     await ledger.addPlan(plan);
-    screen = { kind: "saved", plan };
-    render();
+    landOnPlansTab({ kind: "added" });
   }
 
   function header(root: HTMLElement, title: string, opts: { back?: boolean } = {}): void {
@@ -348,45 +443,71 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
       }),);
   }
 
-  function tabs(root: HTMLElement, savedCount: number): boolean {
+  /**
+   * The single source of truth mapping each `Tab` to its DOM ids
+   * (edit-plan-spec / F3 fix): every place that used to independently
+   * decide "which panel id goes with which tab" -- the tab strip itself,
+   * and each of the two populateBody branches that render a tabpanel --
+   * now reads the SAME table, via `activeTabMeta()` below. That is what
+   * makes the old bug (one call site's ternary agreeing with `tab`, the
+   * other one hardcoded and not) structurally impossible to reintroduce:
+   * there is only one place left that could get it wrong.
+   */
+  const TAB_META: readonly { readonly id: Tab; readonly buttonId: string; readonly panelId: string; readonly label: string }[] = [
+    { id: "plan", buttonId: "ppc-tab-plan", panelId: "ppc-panel-plan", label: copy.VIEW_SWITCH_BACK },
+    { id: "next30", buttonId: "ppc-tab-next30", panelId: "ppc-panel-next30", label: copy.VIEW_SWITCH },
+    { id: "plans", buttonId: "ppc-tab-plans", panelId: "ppc-panel-plans", label: copy.PLANS_LIST_HEADING },
+  ];
+
+  function activeTabMeta(): { readonly panelId: string; readonly buttonId: string } {
+    return TAB_META.find((t) => t.id === tab) ?? (TAB_META[1] as (typeof TAB_META)[number]);
+  }
+
+  /**
+   * Renders the tab strip. `includePlanTab` is false on the `"plans"`
+   * screen (post add/edit/remove/undo): "This plan" previews a candidate
+   * not yet on the ledger, and once you've just added, edited or removed
+   * a plan there is no such candidate to preview any more -- for a
+   * manually-entered plan there never was one at all. Roving tabindex:
+   * exactly one button is ever `tabindex="0"` (the selected one), and
+   * arrow/Home/End move both the roving tabindex and the selection
+   * together, per the tabs pattern.
+   */
+  function tabs(root: HTMLElement, savedCount: number, opts: { includePlanTab: boolean }): boolean {
     if (savedCount < 1) return false;
+    const active = TAB_META.filter((t) => opts.includePlanTab || t.id !== "plan");
     const list = el("div", { className: "tabs", attrs: { role: "tablist", "aria-label": "Views" } });
-    const planTab = el("button", {
-      className: "tab",
-      attrs: {
-        type: "button",
-        role: "tab",
-        id: "ppc-tab-plan",
-        "aria-selected": String(tab === "plan"),
-        "aria-controls": "ppc-panel-plan",
-        tabindex: tab === "plan" ? "0" : "-1",
-      },
-      text: copy.VIEW_SWITCH_BACK,
-      on: { click: () => switchTab("plan") },
-    });
-    const next30Tab = el("button", {
-      className: "tab",
-      attrs: {
-        type: "button",
-        role: "tab",
-        id: "ppc-tab-next30",
-        "aria-selected": String(tab === "next30"),
-        "aria-controls": "ppc-panel-next30",
-        tabindex: tab === "next30" ? "0" : "-1",
-      },
-      text: copy.VIEW_SWITCH,
-      on: { click: () => switchTab("next30") },
-    });
+    const buttons: HTMLButtonElement[] = [];
+    for (const meta of active) {
+      const btn = el("button", {
+        className: "tab",
+        attrs: {
+          type: "button",
+          role: "tab",
+          id: meta.buttonId,
+          "aria-selected": String(tab === meta.id),
+          "aria-controls": meta.panelId,
+          tabindex: tab === meta.id ? "0" : "-1",
+        },
+        text: meta.label,
+        on: { click: () => switchTab(meta.id) },
+      });
+      buttons.push(btn);
+      list.appendChild(btn);
+    }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "Home" || e.key === "End") {
-        e.preventDefault();
-        switchTab(tab === "plan" ? "next30" : "plan");
-      }
+      const idx = active.findIndex((t) => t.id === tab);
+      if (idx < 0) return;
+      let nextIdx: number | null = null;
+      if (e.key === "ArrowRight") nextIdx = (idx + 1) % active.length;
+      else if (e.key === "ArrowLeft") nextIdx = (idx - 1 + active.length) % active.length;
+      else if (e.key === "Home") nextIdx = 0;
+      else if (e.key === "End") nextIdx = active.length - 1;
+      if (nextIdx === null) return;
+      e.preventDefault();
+      switchTab((active[nextIdx] as (typeof active)[number]).id);
     };
-    planTab.addEventListener("keydown", onKey);
-    next30Tab.addEventListener("keydown", onKey);
-    list.appendChild(planTab);
-    list.appendChild(next30Tab);
+    for (const btn of buttons) btn.addEventListener("keydown", onKey);
     root.appendChild(list);
     return true;
   }
@@ -433,7 +554,16 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
     body.appendChild(rows);
   }
 
-  async function renderImpactScreen(body: HTMLElement, state: Extract<EngineState, { kind: "PARSED_CONFIRMABLE" }>): Promise<void> {
+  /**
+   * Returns the plans-tab notice element, if the plans tab happens to be
+   * active AND a notice is pending -- bubbled up so the caller (which
+   * appends `body` into the still-disconnected `panel`) can focus it only
+   * once it is actually connected. In practice this tab is only reachable
+   * here while merely browsing (never with a pending notice, since every
+   * add/edit/remove/undo lands on the dedicated "plans" screen instead —
+   * see `landOnPlansTab`), but the plumbing stays correct either way.
+   */
+  async function renderImpactScreen(body: HTMLElement, state: Extract<EngineState, { kind: "PARSED_CONFIRMABLE" }>): Promise<HTMLElement | null> {
     const existing = await ledger.listPlans();
     const { preview, confirmed } = candidateToRecordPreview(state, today());
     const impact: ImpactView = computeImpact(preview, confirmed, existing, today());
@@ -461,9 +591,76 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
         }),);
       if (existing.length < 1) actions.appendChild(el("span", { className: "tag", text: copy.NOT_ADDED_TAG }));
       body.appendChild(actions);
-    } else {
-      renderNext30Body(body, impact, existing.length >= 1);
+      return null;
     }
+    if (tab === "next30") {
+      renderNext30Body(body, impact, existing.length >= 1);
+      return null;
+    }
+    return renderPlansTabBody(body, existing);
+  }
+
+  /**
+   * The "Plans you've entered" tab body (edit-plan-spec §3, generalized to
+   * the overlay per the founder's own ruling that a per-row menu inside
+   * the toolbar popup was not discoverable): the one-shot outcome notice,
+   * if any, followed by the shared row list. Used by BOTH the "impact"
+   * screen's plans tab (a live candidate is still being decided) and the
+   * "plans" screen (just landed here after an add/edit/remove/undo) --
+   * the list itself never depends on which one it was reached from.
+   *
+   * Returns the notice element when one was shown, so the caller can move
+   * focus onto it AFTER `body` is actually connected (appended into
+   * `panel`, itself already live in the shadow root) -- focusing it here,
+   * before that append happens, would be a no-op: an element cannot
+   * receive focus while disconnected from the document.
+   */
+  function renderPlansTabBody(body: HTMLElement, plans: readonly PaymentPlanRecord[]): HTMLElement | null {
+    let noticeEl: HTMLElement | null = null;
+    if (planNotice) {
+      const notice = planNotice;
+      planNotice = null;
+      noticeEl = buildPlanListNotice(notice, (plan, button) => void handlePlanUndoRemove(plan, button));
+      body.appendChild(noticeEl);
+    }
+    if (plans.length < 1) {
+      body.appendChild(el("p", { className: "plain", text: copy.POPUP_EMPTY_LEDGER }));
+      return noticeEl;
+    }
+    body.appendChild(buildPlanRows(plans, { onEdit: openEdit, onRemove: (plan, button) => void handlePlanRemove(plan, button) }));
+    return noticeEl;
+  }
+
+  /**
+   * The "plans" screen's own "Next 30 days" tab: the same day-grouped
+   * aggregate the old "saved" screen always showed (regardless of which
+   * tab was selected -- the F3 bug), now correctly gated behind this tab
+   * instead. No calendar grid and no "Check the numbers" action here,
+   * matching the old screen's own content exactly -- those belong to
+   * reviewing a not-yet-added candidate, and there is no candidate once
+   * you're just looking at what you've already committed to.
+   */
+  function renderNext30OnlyBody(body: HTMLElement, plans: readonly PaymentPlanRecord[]): void {
+    const agg = aggregateNext30(plans, today());
+    const currency = plans[0]?.currency ?? "CAD";
+    const sumParts = copy.next30SummaryParts(formatCents(agg.totalCents, currency), agg.count);
+    body.appendChild(
+      el("p", {
+        className: "summary",
+        children: [text(`${sumParts.lead} `), el("b", { text: sumParts.sum }), text(` ${sumParts.mid} `), el("b", { text: sumParts.n }), text(` ${sumParts.tail}`)],
+      }),);
+    const rows = el("ul", { className: "rows" });
+    for (const day of agg.days) {
+      rows.appendChild(
+        el("li", {
+          children: [
+            el("span", { className: "date", text: formatMonthDay(day.date) }),
+            el("span", { className: "dow", text: formatWeekday(day.date) }),
+            el("span", { className: "amt", text: formatCents(day.totalCents, currency) }),
+          ],
+        }),);
+    }
+    body.appendChild(rows);
   }
 
   function renderNext30Body(body: HTMLElement, impact: ImpactView, _hasExisting: boolean): void {
@@ -548,6 +745,22 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
     }
   }
 
+  /**
+   * Editing an existing, already-saved plan (edit-plan-spec §4.2), reached
+   * only from a per-row Edit on the plans tab. A full-screen form, tab
+   * strip hidden, exactly like renderConfirm/renderManual above -- see
+   * the Screen type's own comment for why the tab strip cannot stay
+   * visible behind an open form. renderEditPlanSheet moves focus to its
+   * own heading itself (initialFocus: "heading"); nothing here needs to.
+   */
+  function renderEdit(body: HTMLElement, plan: PaymentPlanRecord): void {
+    renderEditPlanSheet(body, {
+      plan,
+      onSave: (updated, changed) => handlePlanEditSave(updated, changed),
+      onCancel: () => cancelForm(),
+    });
+  }
+
   function renderNotRecognized(body: HTMLElement, state: EngineState): void {
     // "unconfirmed" (the pre-gate's structural-signal-only degrade) never
     // asserts the page IS a checkout -- some pages that reach it are not.
@@ -568,67 +781,11 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
     body.appendChild(actions);
   }
 
-  async function renderSaved(body: HTMLElement, plan: PaymentPlanRecord): Promise<void> {
-    const status = el("p", {
-      className: "status",
-      attrs: { role: "status" },
-      children: [
-        text(copy.SAVED_STATUS),
-        el("button", {
-          className: "btn btn--link",
-          attrs: { type: "button" },
-          text: copy.SAVED_UNDO,
-          on: { click: () => handleRemove(plan) },
-        }),
-      ],
-    });
-    body.appendChild(status);
-
-    const all = await ledger.listPlans();
-    const agg = aggregateNext30(all, today());
-    const sumParts = copy.next30SummaryParts(formatCents(agg.totalCents, plan.currency), agg.count);
-    body.appendChild(
-      el("p", {
-        className: "impact",
-        attrs: { style: "margin-top:15px" },
-        children: [text(`${sumParts.lead} `), el("b", { text: sumParts.sum }), text(` ${sumParts.mid} `), el("b", { text: sumParts.n }), text(` ${sumParts.tail}`)],
-      }),);
-
-    const clusterDay = agg.days.find((d) => d.date === plan.firstPaymentDate && d.count >= 2);
-    if (clusterDay) {
-      renderSameDay(body, clusterDay.count, clusterDay.date, clusterDay.totalCents, plan.currency, true);
-    }
-
-    const rows = el("ul", { className: "rows" });
-    for (const day of agg.days) {
-      rows.appendChild(
-        el("li", {
-          children: [
-            el("span", { className: "date", text: formatMonthDay(day.date) }),
-            el("span", { className: "dow", text: formatWeekday(day.date) }),
-            el("span", { className: "amt", text: formatCents(day.totalCents, plan.currency) }),
-          ],
-        }),);
-    }
-    body.appendChild(rows);
-  }
-
-  function renderRemoved(body: HTMLElement, plan: PaymentPlanRecord): void {
-    const status = el("p", {
-      className: "status",
-      attrs: { role: "status" },
-      children: [
-        text(copy.REMOVED_STATUS),
-        el("button", {
-          className: "btn btn--link",
-          attrs: { type: "button" },
-          text: copy.REMOVED_UNDO,
-          on: { click: () => handleReAdd(plan) },
-        }),
-      ],
-    });
-    body.appendChild(status);
-  }
+  // renderSaved/renderRemoved used to live here, each its own Screen kind
+  // that hijacked the panel body regardless of the active tab (the F3
+  // defect). Both retired into renderPlansTabBody + landOnPlansTab above,
+  // which participate in the ordinary tab dispatch instead of bypassing
+  // it -- see the Screen type's own comment for the full reasoning.
 
   /**
    * Builds the panel and attaches it to the shadow root immediately, then
@@ -655,7 +812,23 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
     void populateBody(panel);
   }
 
+  /**
+   * Thin wrapper around the actual branch dispatch below: every branch of
+   * `populateBodyContent` finishes by appending its body and calling
+   * `footer(panel)`, whether or not it needed an async ledger read first,
+   * so this is the one place that can safely act once the restored
+   * screen's content genuinely exists in the DOM -- see
+   * `focusTitleOnNextRender`'s own comment.
+   */
   async function populateBody(panel: HTMLElement): Promise<void> {
+    await populateBodyContent(panel);
+    if (focusTitleOnNextRender) {
+      focusTitleOnNextRender = false;
+      moveFocusToHeading(panel, "#ppc-title");
+    }
+  }
+
+  async function populateBodyContent(panel: HTMLElement): Promise<void> {
     const state = currentState;
     if (!state) return;
 
@@ -673,23 +846,34 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
       footer(panel);
       return;
     }
-    if (screen.kind === "saved") {
-      const existing = await ledger.listPlans();
-      const showTabs = tabs(panel, existing.length);
-      const body = el("div", {
-        className: "panel__body",
-        attrs: showTabs ? { role: "tabpanel", id: "ppc-panel-plan", "aria-labelledby": "ppc-tab-plan" } : {},
-      });
-      await renderSaved(body, screen.plan);
+    if (screen.kind === "edit" && editingPlan) {
+      const body = el("div", { className: "panel__body" });
+      renderEdit(body, editingPlan);
       panel.appendChild(body);
       footer(panel);
       return;
     }
-    if (screen.kind === "removed") {
-      const body = el("div", { className: "panel__body" });
-      renderRemoved(body, screen.plan);
+    if (screen.kind === "plans") {
+      const existing = await ledger.listPlans();
+      const showTabs = tabs(panel, existing.length, { includePlanTab: false });
+      const body = el("div", {
+        className: "panel__body",
+        attrs: showTabs ? { role: "tabpanel", id: activeTabMeta().panelId, "aria-labelledby": activeTabMeta().buttonId } : {},
+      });
+      let plansNoticeEl: HTMLElement | null = null;
+      if (tab === "next30") {
+        renderNext30OnlyBody(body, existing);
+      } else {
+        plansNoticeEl = renderPlansTabBody(body, existing);
+      }
       panel.appendChild(body);
       footer(panel);
+      // Only now is `body` connected (panel is already live in the shadow
+      // root) -- focusing any earlier would be a no-op. Same reasoning as
+      // the popup's own post-action hero (src/popup/PopupApp.ts): a
+      // role="status" region alone cannot be relied on to announce text
+      // inserted during the render that creates it.
+      plansNoticeEl?.focus();
       return;
     }
     if (screen.kind === "not_recognized" || state.kind === "DEGRADED") {
@@ -701,16 +885,15 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
     }
     if (state.kind === "PARSED_CONFIRMABLE") {
       const existing = await ledger.listPlans();
-      const showTabs = tabs(panel, existing.length);
+      const showTabs = tabs(panel, existing.length, { includePlanTab: true });
       const body = el("div", {
         className: "panel__body",
-        attrs: showTabs
-          ? { role: "tabpanel", id: tab === "plan" ? "ppc-panel-plan" : "ppc-panel-next30", "aria-labelledby": tab === "plan" ? "ppc-tab-plan" : "ppc-tab-next30" }
-          : {},
+        attrs: showTabs ? { role: "tabpanel", id: activeTabMeta().panelId, "aria-labelledby": activeTabMeta().buttonId } : {},
       });
-      await renderImpactScreen(body, state);
+      const noticeEl = await renderImpactScreen(body, state);
       panel.appendChild(body);
       footer(panel);
+      noticeEl?.focus();
       return;
     }
     // PARTIAL, not yet routed to the manual form (mounts directly into it, §4.7).
@@ -747,6 +930,9 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
     // reusing a suggestion read from a prior DOM snapshot.
     orderTotalSuggestion = undefined;
     previousScreen = null;
+    editingPlan = null;
+    planNotice = null;
+    focusTitleOnNextRender = false;
     tab = "plan";
     screen =
       state.kind === "PARSED_CONFIRMABLE"

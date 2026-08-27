@@ -487,7 +487,7 @@ async function collectAllRenderedCopy(): Promise<string[]> {
     await createPopupApp(root, { store, ledger, today: () => "2026-06-01" }).init();
     // The list heading + two rows, each with an Edit and a Remove control
     // (PLANS_LIST_HEADING, EDIT_ACTION_SHORT, REMOVE_ACTION_SHORT,
-    // editRowLabelSuffix, planRowSummary).
+    // planRowLabelSuffix, planRowSummary).
     collected.push(...collectUserFacingStrings(root));
 
     const editButtons = () => [...root.querySelectorAll(".rows li button")].filter((b) => b.textContent?.startsWith("Edit"));

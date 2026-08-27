@@ -105,7 +105,7 @@ export const EDIT_ACTION_SHORT = "Edit";
  * part of the original spec's pre-cleared string list -- follows the exact
  * same disambiguation pattern the spec designed for Edit (§3.4):
  * REMOVE_ACTION_SHORT is the visible label, and the row's own
- * editRowLabelSuffix() supplies the shared visually-hidden suffix, so
+ * planRowLabelSuffix() supplies the shared visually-hidden suffix, so
  * "Remove, Remove, Remove" never reaches a screen-reader user any more
  * than "Edit, Edit, Edit" would.
  */
@@ -129,9 +129,12 @@ export const EDIT_TARGET_GONE = "That plan isn't there any more. Nothing was cha
  * per-payment amount too -- the founder's own two-plans-on-one-day
  * screenshot is exactly the case this exists for. Shared by both row
  * controls rather than duplicated: the suffix content itself never
- * mentions which action it is attached to.
+ * mentions which action it is attached to. Named for the row, not either
+ * button ("Edit"/"Remove" repeated N times is the same SC 4.1.2 failure
+ * either way) — formerly `editRowLabelSuffix`, renamed once Remove
+ * started using it too.
  */
-export function editRowLabelSuffix(dateText: string, eachText: string): string {
+export function planRowLabelSuffix(dateText: string, eachText: string): string {
   return ` the plan starting ${dateText}, ${eachText} each`;
 }
 
