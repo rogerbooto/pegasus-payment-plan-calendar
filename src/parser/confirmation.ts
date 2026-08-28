@@ -92,6 +92,19 @@ export interface ConfirmedPlanMeta {
   readonly id: string;
   readonly createdAt: string;
   readonly firstPaymentDate: string;
+  /**
+   * The user-typed plan name ("" when left blank). Lives in META, not in
+   * ConfirmedPlanValues, deliberately: ConfirmedPlanValues is the one
+   * bridge from an engine candidate to a storable record, and keeping any
+   * name-shaped field out of it is what makes "the extraction path cannot
+   * populate this" structural — confirmPlan() above builds its return
+   * object from exactly the five value fields, so even a caller that
+   * smuggles extra properties into `values` cannot get them through the
+   * gate. Meta is supplied only by the form layer
+   * (src/overlay/ConfirmationSheet.ts), from a text input the user typed.
+   * tests/static/custom-name-user-typed-only.test.ts pins this shape.
+   */
+  readonly customName: string;
 }
 
 /**
@@ -114,5 +127,6 @@ export function buildConfirmedPlanRecord(
     cadence: confirmed.cadence,
     perInstallmentCents: confirmed.perInstallmentCents,
     firstPaymentDate: meta.firstPaymentDate,
+    customName: meta.customName,
   };
 }

@@ -104,6 +104,7 @@ function candidateToRecordPreview(state: Extract<EngineState, { kind: "PARSED_CO
     cadence: confirmed.cadence,
     perInstallmentCents: confirmed.perInstallmentCents,
     firstPaymentDate: today,
+    customName: "",
   };
   return { preview, confirmed };
 }
@@ -373,7 +374,10 @@ export function createOverlayHost(doc: Document, deps: OverlayHostDeps = {}): Ov
    * writes nothing either, and only an actual value change ever calls
    * `updatePlan`. */
   async function handlePlanEditSave(updated: PaymentPlanRecord, changed: EditChangeSummary): Promise<void> {
-    if (!changed.valuesChanged) {
+    // A rename alone IS a change that must be written -- it just never
+    // flips `source` (see EditChangeSummary.nameChanged) and never moves
+    // a date, so it lands on the "dates didn't change" notice below.
+    if (!changed.valuesChanged && !changed.nameChanged) {
       landOnPlansTab({ kind: "unchanged" });
       return;
     }

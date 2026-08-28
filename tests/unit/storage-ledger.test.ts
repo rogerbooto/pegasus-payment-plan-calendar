@@ -13,6 +13,7 @@ import {
 import type { Settings } from "../../src/storage/ledger";
 import type { KeyValueStore } from "../../src/storage/store";
 import { PlanNotFoundError, StorageSchemaError } from "../../src/shared/errors";
+import { PLAN_CUSTOM_NAME_MAX_LENGTH } from "../../src/shared/constants";
 
 function memoryStore(): KeyValueStore & { data: Record<string, unknown> } {
   const data: Record<string, unknown> = {};
@@ -66,6 +67,7 @@ const validPlan = {
   cadence: "BIWEEKLY",
   perInstallmentCents: 2249,
   firstPaymentDate: "2026-09-01",
+  customName: "",
 };
 
 describe("plan record allowlist", () => {
@@ -217,10 +219,12 @@ describe("settings allowlist", () => {
   it("checkoutReadingEnabled is a SETTINGS field only -- the plan record allowlist did not grow to admit it", () => {
     expect(() => validatePlanRecord({ ...validPlan, checkoutReadingEnabled: true })).toThrow(StorageSchemaError);
     expect(() => validatePlanRecord({ ...validPlan, checkoutReadingEnabled: true })).toThrow(/non-allowlisted field/);
-    // The unmodified 9-field plan record still validates on its own --
-    // proof the plan schema itself was untouched by this change.
+    // The unmodified plan record still validates on its own -- proof the
+    // plan schema itself was untouched by this change. (9 fields when this
+    // test was written; 10 since customName -- its own reviewed addition,
+    // with its own tests below.)
     expect(validatePlanRecord(validPlan).id).toBe(validPlan.id);
-    expect(Object.keys(validPlan)).toHaveLength(9);
+    expect(Object.keys(validPlan)).toHaveLength(10);
   });
 });
 
@@ -399,6 +403,141 @@ describe("usage-flags allowlist (closes the storage-seam bypass: 'usage' used to
 
   it("STORAGE_KEY_ALLOWLIST includes 'usage' -- the top-level key usage-tracking.ts writes is no longer outside this file's own closed schema", () => {
     expect(STORAGE_KEY_ALLOWLIST).toContain("usage");
+  });
+});
+
+describe("customName -- the user-typed plan name (tenth plan field)", () => {
+  // The field name itself, checked against the REAL forbidden list
+  // programmatically (case-insensitively), never by eye: RED if the field
+  // is ever renamed to something matching a refused data class, or if a
+  // future FORBIDDEN_KEY_SUBSTRINGS addition collides with it -- either
+  // way the collision surfaces here as a review, not as a silent
+  // validatePlanRecord throw in production.
+  it("the field name matches no FORBIDDEN_KEY_SUBSTRINGS entry", () => {
+    const lower = "customName".toLowerCase();
+    for (const forbidden of FORBIDDEN_KEY_SUBSTRINGS) {
+      expect(lower.includes(forbidden), `"customName" must not contain "${forbidden}"`).toBe(false);
+    }
+    // And the forbidden list still contains the two names the founder
+    // first asked for -- the refusal that makes the user-typed version
+    // the only acceptable one.
+    expect(FORBIDDEN_KEY_SUBSTRINGS).toContain("merchant");
+    expect(FORBIDDEN_KEY_SUBSTRINGS).toContain("item");
+  });
+
+  it("accepts '' (no name) and a short typed name", () => {
+    expect(validatePlanRecord({ ...validPlan, customName: "" }).customName).toBe("");
+    expect(validatePlanRecord({ ...validPlan, customName: "Laptop" }).customName).toBe("Laptop");
+  });
+
+  // The guard-is-alive pin the settings migration proved for `theme`:
+  // assertClosedFieldSet rejects a MISSING field as loudly as an unknown
+  // one, so a direct writer (addPlan/updatePlan) must always supply
+  // customName -- only listPlans()'s migration path may default it. RED
+  // if "customName" is ever removed from PLAN_FIELD_ALLOWLIST.
+  it("is required on the direct write path -- a record missing customName is rejected by name", () => {
+    const { customName: _customName, ...withoutName } = validPlan;
+    expect(() => validatePlanRecord(withoutName)).toThrow(StorageSchemaError);
+    expect(() => validatePlanRecord(withoutName)).toThrow(/missing required field "customName"/);
+  });
+
+  it("rejects non-string, untrimmed, over-long and control-character values", () => {
+    expect(() => validatePlanRecord({ ...validPlan, customName: 7 })).toThrow(StorageSchemaError);
+    expect(() => validatePlanRecord({ ...validPlan, customName: null })).toThrow(StorageSchemaError);
+    expect(() => validatePlanRecord({ ...validPlan, customName: " Laptop" })).toThrow(/whitespace/);
+    expect(() => validatePlanRecord({ ...validPlan, customName: "Laptop " })).toThrow(/whitespace/);
+    expect(() => validatePlanRecord({ ...validPlan, customName: "x".repeat(PLAN_CUSTOM_NAME_MAX_LENGTH + 1) })).toThrow(
+      /at most/,);
+    expect(validatePlanRecord({ ...validPlan, customName: "x".repeat(PLAN_CUSTOM_NAME_MAX_LENGTH) }).customName).toHaveLength(
+      PLAN_CUSTOM_NAME_MAX_LENGTH,);
+    expect(() => validatePlanRecord({ ...validPlan, customName: "a\u0000b" })).toThrow(/control characters/);
+    expect(() => validatePlanRecord({ ...validPlan, customName: "a\u0009b" })).toThrow(/control characters/);
+  });
+});
+
+describe("PlanLedger.listPlans() -- the customName migration (the tenth-field HARD BLOCKER from the edit-plan spec R4)", () => {
+  /** A raw nine-field record as a real pre-customName install stored it --
+   * injected straight into the store's data, NEVER through addPlan (the
+   * validated writer would reject it today, which is the whole point). */
+  const legacyNineFieldPlan = (id: string, firstPaymentDate = "2026-09-01") => ({
+    id,
+    createdAt: "2026-08-24",
+    source: "checkout_confirmed",
+    currency: "CAD",
+    orderTotalCents: 8996,
+    installmentCount: 4,
+    cadence: "BIWEEKLY",
+    perInstallmentCents: 2249,
+    firstPaymentDate,
+  });
+
+  it("a pre-existing nine-field record stays readable: it reads back with customName '' and the cleaned record is PERSISTED, so the next read finds it already clean", async () => {
+    const store = memoryStore();
+    store.data.plans = [legacyNineFieldPlan("legacy1")];
+    const ledger = new PlanLedger(store);
+
+    const plans = await ledger.listPlans();
+    expect(plans).toHaveLength(1);
+    expect(plans[0]?.id).toBe("legacy1");
+    expect(plans[0]?.customName).toBe("");
+    // Written back clean -- assert on the STORE's bytes, not the returned
+    // view: a migration that only cleans the return value would leave the
+    // stored record still throwing under a stricter future read.
+    expect((store.data.plans as unknown[])[0]).toEqual({ ...legacyNineFieldPlan("legacy1"), customName: "" });
+
+    // A second, independent ledger over the same store sees it too.
+    const secondRead = await new PlanLedger(store).listPlans();
+    expect(secondRead[0]?.customName).toBe("");
+  });
+
+  it("does NOT rewrite an already-clean array on read -- zero store.set calls when every record carries customName", async () => {
+    const store = countingStore();
+    const ledger = new PlanLedger(store);
+    await ledger.addPlan(validPlan);
+    store.setCalls = 0;
+
+    await ledger.listPlans();
+    await ledger.listPlans();
+    expect(store.setCalls).toBe(0);
+  });
+
+  it("performs exactly ONE migration write for a legacy array, and none on the read after it", async () => {
+    const store = countingStore();
+    store.data.plans = [legacyNineFieldPlan("legacy1")];
+    const ledger = new PlanLedger(store);
+
+    await ledger.listPlans();
+    expect(store.setCalls).toBe(1);
+    await ledger.listPlans();
+    expect(store.setCalls).toBe(1);
+  });
+
+  it("a mixed array (clean, legacy, clean) migrates without reordering and without touching the named record's own name -- the list does not blank", async () => {
+    const store = memoryStore();
+    store.data.plans = [
+      { ...legacyNineFieldPlan("aaaaaa", "2026-09-01"), customName: "Laptop" },
+      legacyNineFieldPlan("bbbbbb", "2026-09-02"),
+      { ...legacyNineFieldPlan("cccccc", "2026-09-03"), customName: "" },
+    ];
+    const ledger = new PlanLedger(store);
+
+    const plans = await ledger.listPlans();
+    expect(plans.map((p) => p.id)).toEqual(["aaaaaa", "bbbbbb", "cccccc"]);
+    expect(plans.map((p) => p.customName)).toEqual(["Laptop", "", ""]);
+    // Storage order preserved byte-for-byte too (updatePlan's
+    // splice-in-place and the stable same-date sort depend on it).
+    expect((store.data.plans as { id: string }[]).map((p) => p.id)).toEqual(["aaaaaa", "bbbbbb", "cccccc"]);
+  });
+
+  it("defaults ONLY the missing customName: a legacy record with any other defect still throws exactly as before", async () => {
+    const store = memoryStore();
+    const { source: _source, ...legacyMissingSource } = legacyNineFieldPlan("badrec");
+    store.data.plans = [legacyMissingSource];
+    const ledger = new PlanLedger(store);
+    await expect(ledger.listPlans()).rejects.toThrow(/missing required field "source"/);
+
+    store.data.plans = [{ ...legacyNineFieldPlan("badrec2"), merchant: "x" }];
+    await expect(new PlanLedger(store).listPlans()).rejects.toThrow(StorageSchemaError);
   });
 });
 

@@ -39,7 +39,7 @@ import type {
 } from "../shared/types";
 import { formatCents } from "../shared/format";
 import { multiplyCents, type Cents } from "../shared/money";
-import { arithmeticToleranceCents, INSTALLMENT_COUNT_MAX, INSTALLMENT_COUNT_MIN } from "../shared/constants";
+import { arithmeticToleranceCents, INSTALLMENT_COUNT_MAX, INSTALLMENT_COUNT_MIN, PLAN_CUSTOM_NAME_MAX_LENGTH } from "../shared/constants";
 import { confirmPlan, buildConfirmedPlanRecord, type ConfirmedPlanInput } from "../parser/confirmation";
 import { paymentDates } from "../impact/engine";
 import { el, clear, moveFocusToHeading, text } from "./dom";
@@ -148,6 +148,14 @@ interface BuildFormOptions {
   readonly each: FieldSpec;
   readonly firstDate: IsoDate;
   /**
+   * Prefill for the optional "What it was" name field: "" on both add
+   * forms (there is NEVER a page-derived suggestion for a name -- see
+   * PaymentPlanRecord.customName's doc), the stored name on the edit
+   * form. Required rather than optional so a new caller must decide,
+   * visibly, what its prefill is.
+   */
+  readonly nameInitial: string;
+  /**
    * When present, every field's hint text is this string instead of the
    * default FIELD_HINT_PARSED/FIELD_HINT_MISSING/FIELD_HINT_FIRST_PAYMENT
    * split -- those all claim a value came from a page, which the edit form
@@ -166,12 +174,20 @@ interface BuildFormOptions {
    * equally pre-filled, so no one field is the natural place to land.
    */
   readonly initialFocus?: "total" | "heading";
+  /**
+   * `customName` arrives as its own argument, never inside `values`:
+   * `values` is what flows through confirmPlan()'s numeric gate
+   * (ConfirmedPlanValues), and the name deliberately has no seat there --
+   * it goes straight from the text input to the record builder's meta.
+   * Always already trimmed, control-characters stripped, and length-capped
+   * by the submit handler below.
+   */
   readonly buildRecord: (values: {
     orderTotalCents: Cents;
     installmentCount: number;
     cadence: Cadence;
     perInstallmentCents: Cents;
-  }, firstPaymentDate: IsoDate) => PaymentPlanRecord;
+  }, firstPaymentDate: IsoDate, customName: string) => PaymentPlanRecord;
   readonly onConfirm: (confirmed: PaymentPlanRecord) => void | Promise<void>;
   readonly onCancel: () => void;
 }
@@ -268,6 +284,26 @@ function renderForm(opts: BuildFormOptions): void {
       ],
     }),);
 
+  // The optional "What it was" name field, last: the five fields above ARE
+  // the plan; the name is an annotation on it, and putting it after them
+  // keeps initial focus (order total) and the numeric tab order untouched.
+  // Its hint is always FIELD_HINT_NAME, never opts.hintOverride and never
+  // the FIELD_HINT_PARSED/FIELD_HINT_MISSING pair -- every one of those
+  // claims something about a page, and no page is ever where this value
+  // comes from. Not `required`, and never marked missing, for the same
+  // reason: "missing" would imply somewhere it could have been found.
+  const nameField = textField(
+    {
+      id: "ppc-f-name",
+      label: copy.FIELD_LABEL_NAME,
+      initial: opts.nameInitial,
+      missing: false,
+      placeholder: copy.FIELD_PLACEHOLDER_NAME,
+    },
+    { type: "text", maxlength: String(PLAN_CUSTOM_NAME_MAX_LENGTH), autocomplete: "off", spellcheck: "false" },
+    copy.FIELD_HINT_NAME,);
+  fields.appendChild(nameField.wrap);
+
   form.appendChild(fields);
 
   // §5 R5 (first-run UX spec): the preview line and the arithmetic note
@@ -354,6 +390,7 @@ function renderForm(opts: BuildFormOptions): void {
       cadence,
       perInstallmentCents: eachCents,
       firstPaymentDate: first,
+      customName: "",
     });
     const lead = copy.formEcho(dates.map((d) => formatMonthDay(d)));
     echo.appendChild(text(`${lead.lead} `));
@@ -425,11 +462,25 @@ function renderForm(opts: BuildFormOptions): void {
       return;
     }
 
+    // Normalized here, before validatePlanRecord sees it, so a stray paste
+    // (control characters, surrounding whitespace, or -- in a browser that
+    // doesn't enforce maxlength -- an over-long value) becomes the typed
+    // name the user meant rather than a SAVE_FAILED whose storage-full
+    // wording would be the wrong diagnosis (the same reasoning as F7's
+    // date check above). "" stays "": the field is optional.
+    const customName = nameField.input.value
+      // eslint-disable-next-line no-control-regex -- stripping control characters is the point
+      .replace(/[\u0000-\u001F\u007F-\u009F]/g, " ")
+      .trim()
+      .slice(0, PLAN_CUSTOM_NAME_MAX_LENGTH)
+      .trim();
+
     let record: PaymentPlanRecord;
     try {
       record = opts.buildRecord(
         { orderTotalCents: totalCents, installmentCount: count, cadence, perInstallmentCents: eachCents },
-        first,);
+        first,
+        customName,);
     } catch {
       return;
     }
@@ -502,7 +553,8 @@ export function renderConfirmationSheet(container: HTMLElement, props: Confirmat
       missing: false,
     },
     firstDate: today,
-    buildRecord: (values, firstPaymentDate) => {
+    nameInitial: "",
+    buildRecord: (values, firstPaymentDate, customName) => {
       const confirmed: ConfirmedPlanInput = confirmPlan({
         confirmed: true,
         values: { ...values, currency: candidate.currency },
@@ -511,6 +563,7 @@ export function renderConfirmationSheet(container: HTMLElement, props: Confirmat
         id: crypto.randomUUID(),
         createdAt: today,
         firstPaymentDate,
+        customName,
       });
     },
     onConfirm: props.onConfirm,
@@ -526,7 +579,13 @@ export function renderConfirmationSheet(container: HTMLElement, props: Confirmat
  */
 function buildManualPlanRecord(
   confirmed: ConfirmedPlanInput,
-  meta: { readonly id: string; readonly createdAt: IsoDate; readonly firstPaymentDate: IsoDate },): PaymentPlanRecord {
+  meta: {
+    readonly id: string;
+    readonly createdAt: IsoDate;
+    readonly firstPaymentDate: IsoDate;
+    /** User-typed, from the form's own text input; "" when left blank. */
+    readonly customName: string;
+  },): PaymentPlanRecord {
   return {
     id: meta.id,
     createdAt: meta.createdAt,
@@ -537,6 +596,7 @@ function buildManualPlanRecord(
     cadence: confirmed.cadence,
     perInstallmentCents: confirmed.perInstallmentCents,
     firstPaymentDate: meta.firstPaymentDate,
+    customName: meta.customName,
   };
 }
 
@@ -585,7 +645,11 @@ export function renderManualEntrySheet(container: HTMLElement, props: ManualEntr
       placeholder: "$0.00",
     },
     firstDate: today,
-    buildRecord: (values, firstPaymentDate) => {
+    // "" always: a PARTIAL prefill and an order-total suggestion carry
+    // numbers -- neither type is even capable of carrying a name, and the
+    // name field starts blank on every add path.
+    nameInitial: "",
+    buildRecord: (values, firstPaymentDate, customName) => {
       const confirmed = confirmPlan({
         confirmed: true,
         values: { ...values, currency },
@@ -594,6 +658,7 @@ export function renderManualEntrySheet(container: HTMLElement, props: ManualEntr
         id: crypto.randomUUID(),
         createdAt: today,
         firstPaymentDate,
+        customName,
       });
     },
     onConfirm: props.onConfirm,
@@ -602,11 +667,26 @@ export function renderManualEntrySheet(container: HTMLElement, props: ManualEntr
 }
 
 export interface EditChangeSummary {
-  /** True when any of the five user-editable values differs from the stored plan. */
+  /** True when any of the five user-editable VALUES (total, count,
+   *  cadence, per-payment amount, first date) differs from the stored
+   *  plan. The name is deliberately not one of them -- see `nameChanged`. */
   readonly valuesChanged: boolean;
   /** True when the computed payment dates differ from the stored plan's.
    *  Always false when valuesChanged is false. */
   readonly datesChanged: boolean;
+  /**
+   * True when only-or-also the user-typed name differs. Kept SEPARATE
+   * from valuesChanged on purpose: `source` records the provenance of the
+   * NUMBERS (whether they are still exactly what a checkout showed and
+   * the user confirmed), and the name has exactly one possible provenance
+   * -- the user -- no matter when it is typed. Renaming a
+   * checkout_confirmed plan therefore never flips source to manual
+   * (buildEditedPlanRecord's §1.1 comparison excludes the name), but it
+   * IS still a real change that must be written and honestly announced
+   * ("Saved. The dates on your calendar didn't change."), never reported
+   * as "Nothing changed."
+   */
+  readonly nameChanged: boolean;
 }
 
 export interface EditPlanSheetProps {
@@ -633,7 +713,13 @@ export interface EditPlanSheetProps {
 function buildEditedPlanRecord(
   confirmed: ConfirmedPlanInput,
   original: PaymentPlanRecord,
-  firstPaymentDate: IsoDate,): PaymentPlanRecord {
+  firstPaymentDate: IsoDate,
+  customName: string,): PaymentPlanRecord {
+  // §1.1's five values only. `customName` is deliberately absent from this
+  // comparison: it never came from a checkout, so changing it says nothing
+  // about whether the NUMBERS still match what the checkout showed -- a
+  // rename-only edit keeps source: checkout_confirmed. See
+  // EditChangeSummary.nameChanged.
   const valuesChanged =
     confirmed.orderTotalCents !== original.orderTotalCents ||
     confirmed.installmentCount !== original.installmentCount ||
@@ -650,6 +736,7 @@ function buildEditedPlanRecord(
     cadence: confirmed.cadence,
     perInstallmentCents: confirmed.perInstallmentCents,
     firstPaymentDate,
+    customName,
   };
 }
 
@@ -668,7 +755,8 @@ function computeEditChangeSummary(original: PaymentPlanRecord, next: PaymentPlan
     next.perInstallmentCents !== original.perInstallmentCents ||
     next.firstPaymentDate !== original.firstPaymentDate;
   const datesChanged = valuesChanged && !datesEqual(paymentDates(original), paymentDates(next));
-  return { valuesChanged, datesChanged };
+  const nameChanged = next.customName !== original.customName;
+  return { valuesChanged, datesChanged, nameChanged };
 }
 
 function datesEqual(a: readonly IsoDate[], b: readonly IsoDate[]): boolean {
@@ -720,12 +808,15 @@ export function renderEditPlanSheet(container: HTMLElement, props: EditPlanSheet
     // §4.2 — the stored date, never today: an edit form must never suggest
     // "today" is where this plan starts.
     firstDate: plan.firstPaymentDate,
+    // The stored name IS authoritative here, like every other edit-form
+    // prefill; "" renders the same blank, optional field the add forms show.
+    nameInitial: plan.customName,
     hintOverride: copy.EDIT_FIELD_HINT,
     submitLabel: copy.FORM_SUBMIT_EDIT,
     initialFocus: "heading",
-    buildRecord: (values, firstPaymentDate) => {
+    buildRecord: (values, firstPaymentDate, customName) => {
       const confirmed = confirmPlan({ confirmed: true, values: { ...values, currency: plan.currency } });
-      return buildEditedPlanRecord(confirmed, plan, firstPaymentDate);
+      return buildEditedPlanRecord(confirmed, plan, firstPaymentDate, customName);
     },
     onConfirm: (updated) => props.onSave(updated, computeEditChangeSummary(plan, updated)),
     onCancel: props.onCancel,

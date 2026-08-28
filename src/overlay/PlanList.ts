@@ -41,7 +41,7 @@ export function buildPlanRow(plan: PaymentPlanRecord, handlers: PlanRowHandlers)
   const dateText = formatMonthDay(plan.firstPaymentDate);
   const eachText = formatCents(plan.perInstallmentCents, plan.currency);
   const totalText = formatCents(plan.orderTotalCents, plan.currency);
-  const suffix = copy.planRowLabelSuffix(dateText, eachText);
+  const suffix = copy.planRowLabelSuffix(dateText, eachText, plan.customName);
 
   const editBtn = el("button", {
     className: "btn btn--link",
@@ -64,6 +64,11 @@ export function buildPlanRow(plan: PaymentPlanRecord, handlers: PlanRowHandlers)
       el("span", { className: "amt", text: eachText }),
       editBtn,
       removeBtn,
+      // The user-typed name, only when one exists: its own full-width line
+      // above the summary, so rows without a name keep today's exact
+      // anatomy and mixed lists still align on the date column. Rendered
+      // via textContent like everything else -- typed text, never markup.
+      plan.customName !== "" ? el("span", { className: "name", text: plan.customName }) : null,
       el("span", {
         className: "sub",
         text: copy.planRowSummary(plan.installmentCount, copy.CADENCE_OPTION_LABELS[plan.cadence], totalText),

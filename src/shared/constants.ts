@@ -28,6 +28,15 @@ export const SOFT_SIGNAL_MAX = 6;
 export const MUTATION_DEBOUNCE_MS = 300;
 export const VALUE_STABILITY_TICK_MS = 500;
 
+/**
+ * Longest allowed `PaymentPlanRecord.customName` (in UTF-16 code units,
+ * the same unit String#length and the input's maxlength attribute use).
+ * Sized for what the field is — a short, user-typed "what it was"
+ * ("Laptop", "Winter tires") that must still fit a 340px popup row — not
+ * a notes field.
+ */
+export const PLAN_CUSTOM_NAME_MAX_LENGTH = 40;
+
 /** Versions the bundled config and stored data are validated against. */
 export const CONFIG_SCHEMA_VERSION = 1;
 export const STORAGE_SCHEMA_VERSION = 1;

@@ -41,7 +41,7 @@ function candidate(overrides: Partial<ScheduleCandidate> = {}): ScheduleCandidat
   };
 }
 
-const CONTROL_IDS = ["ppc-f-total", "ppc-f-count", "ppc-f-cadence", "ppc-f-each", "ppc-f-first"] as const;
+const CONTROL_IDS = ["ppc-f-total", "ppc-f-count", "ppc-f-cadence", "ppc-f-each", "ppc-f-first", "ppc-f-name"] as const;
 
 describe("§7.4.7 — field anatomy", () => {
   it("every .field contains exactly one .field__head, whose first element child is the <label>", () => {
@@ -113,7 +113,7 @@ describe("§7.4.7 — field anatomy", () => {
     renderConfirmationSheet(el, { candidate: candidate(), onConfirm: vi.fn(), onCancel: vi.fn() });
 
     const controls = [...el.querySelectorAll("input[aria-describedby], select[aria-describedby]")];
-    expect(controls.length).toBe(5);
+    expect(controls.length).toBe(6);
     for (const control of controls) {
       const describedBy = control.getAttribute("aria-describedby")!;
       const hint = el.querySelector(`#${describedBy}`);
@@ -137,7 +137,7 @@ describe("§7.4.7 — field anatomy", () => {
 });
 
 describe("§7.4.8 — three rows, original order (the tab-order guard)", () => {
-  it("the form contains exactly two .grid2 elements and one full-width .field outside them", () => {
+  it("the form contains exactly two .grid2 elements and two full-width .field elements outside them (first payment + the name field)", () => {
     const el = container();
     renderConfirmationSheet(el, { candidate: candidate(), onConfirm: vi.fn(), onCancel: vi.fn() });
 
@@ -147,10 +147,10 @@ describe("§7.4.8 — three rows, original order (the tab-order guard)", () => {
 
     const fieldsRegion = form.querySelector(".form__fields") as HTMLElement;
     const topLevelFields = [...fieldsRegion.children].filter((c) => c.classList.contains("field"));
-    expect(topLevelFields.length).toBe(1);
+    expect(topLevelFields.length).toBe(2);
   });
 
-  it("the id's of the five controls appear in document order exactly total, count, cadence, each, first", () => {
+  it("the id's of the six controls appear in document order exactly total, count, cadence, each, first, name", () => {
     const el = container();
     renderConfirmationSheet(el, { candidate: candidate(), onConfirm: vi.fn(), onCancel: vi.fn() });
 

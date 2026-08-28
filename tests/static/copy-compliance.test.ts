@@ -173,6 +173,7 @@ function samplePlan(id: string): PaymentPlanRecord {
     cadence: "MONTHLY",
     perInstallmentCents: assertCents(1500, "each"),
     firstPaymentDate: "2026-06-01",
+    customName: "",
   };
 }
 
@@ -468,6 +469,9 @@ async function collectAllRenderedCopy(): Promise<string[]> {
       cadence: "BIWEEKLY",
       perInstallmentCents: assertCents(3750, "each"),
       firstPaymentDate: "2026-08-26",
+      // A real name, so the rendered .name line and the name-bearing
+      // accessible suffix are part of the scanned corpus below.
+      customName: "Laptop",
     };
     const planB: PaymentPlanRecord = {
       id: "55555555-5555-4555-8555-555555555555",
@@ -479,6 +483,7 @@ async function collectAllRenderedCopy(): Promise<string[]> {
       cadence: "MONTHLY",
       perInstallmentCents: assertCents(5000, "each"),
       firstPaymentDate: "2026-08-26",
+      customName: "",
     };
     const store = memoryStore({ settings: { checkoutReadingEnabled: false }, plans: [planA, planB] });
     const ledger = new PlanLedger(store);

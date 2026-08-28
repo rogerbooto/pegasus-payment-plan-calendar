@@ -131,4 +131,23 @@ export interface PaymentPlanRecord {
   readonly cadence: Cadence;
   readonly perInstallmentCents: Cents;
   readonly firstPaymentDate: IsoDate;
+  /**
+   * An optional, user-typed name for the plan ("Laptop", "Headphones") so
+   * two plans starting on the same date can be told apart in the list.
+   * `""` means the user left it blank — the field is always present in a
+   * stored record (the closed allowlist rejects a missing field), never
+   * absent.
+   *
+   * Provenance is the entire point of this field's design: it is typed by
+   * the user in the add/edit form and NOWHERE else. It is never read,
+   * suggested, or prefilled from a page — the engine's output types
+   * (ScheduleCandidate, PartialCandidate, OrderTotalSuggestion) carry no
+   * name-shaped field, and the confirmation gate's ConfirmedPlanValues
+   * (src/parser/confirmation.ts) does not either, so the extraction path
+   * is structurally unable to supply one. The merchant/product name a
+   * page could offer is exactly the data class FORBIDDEN_KEY_SUBSTRINGS
+   * (src/storage/ledger.ts) exists to refuse.
+   * tests/static/custom-name-user-typed-only.test.ts pins all of this.
+   */
+  readonly customName: string;
 }

@@ -33,6 +33,7 @@ function samplePlan(id = "11111111-1111-4111-8111-111111111111"): PaymentPlanRec
     cadence: "MONTHLY",
     perInstallmentCents: assertCents(1500, "each"),
     firstPaymentDate: "2026-06-01",
+    customName: "",
   };
 }
 
@@ -44,7 +45,7 @@ function planWith(overrides: Partial<PaymentPlanRecord> = {}): PaymentPlanRecord
   return { ...samplePlan(), ...overrides };
 }
 
-function fillEditForm(el: HTMLElement, values: Partial<{ total: string; count: string; cadence: string; each: string; first: string }>): void {
+function fillEditForm(el: HTMLElement, values: Partial<{ total: string; count: string; cadence: string; each: string; first: string; name: string }>): void {
   if (values.total !== undefined) {
     const input = el.querySelector("#ppc-f-total") as HTMLInputElement;
     input.value = values.total;
@@ -68,6 +69,11 @@ function fillEditForm(el: HTMLElement, values: Partial<{ total: string; count: s
   if (values.first !== undefined) {
     const input = el.querySelector("#ppc-f-first") as HTMLInputElement;
     input.value = values.first;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  if (values.name !== undefined) {
+    const input = el.querySelector("#ppc-f-name") as HTMLInputElement;
+    input.value = values.name;
     input.dispatchEvent(new Event("input", { bubbles: true }));
   }
 }
@@ -955,6 +961,33 @@ describe("PopupApp — the edit screen and the hero notice (edit-plan-spec §4/�
 
     expect(el.querySelector('[role="status"]')?.textContent).toBe(overlayCopy.EDIT_NO_CHANGE);
     expect(setSpy).not.toHaveBeenCalled();
+  });
+
+  it("a rename-only edit IS a write: the typed name persists, source stays checkout_confirmed, the notice is EDIT_SAVED_NO_DATE_CHANGE (never 'Nothing changed.'), and the row now shows the name", async () => {
+    const plan = planWith({ source: "checkout_confirmed", customName: "" });
+    const store = createFakeStore({ settings: { checkoutReadingEnabled: false }, plans: [plan] });
+    const el = root();
+    await createPopupApp(el, { store, today: () => "2026-06-01" }).init();
+
+    editButtons(el)[0]?.click();
+    await flush();
+    fillEditForm(el, { name: "Laptop" });
+    submitForm(el);
+    await flush();
+
+    // Persisted -- assert on the STORE, not on what the screen re-renders.
+    const stored = await store.get(["plans"]);
+    const savedPlans = stored.plans as PaymentPlanRecord[];
+    expect(savedPlans[0]?.customName).toBe("Laptop");
+    // The provenance ruling: a rename says nothing about the NUMBERS, so
+    // the checkout_confirmed tag survives it.
+    expect(savedPlans[0]?.source).toBe("checkout_confirmed");
+    expect(savedPlans[0]?.id).toBe(plan.id);
+
+    const status = el.querySelector('[role="status"]');
+    expect(status?.textContent).toBe(overlayCopy.EDIT_SAVED_NO_DATE_CHANGE);
+
+    expect(el.querySelector(".rows li .name")?.textContent).toBe("Laptop");
   });
 
   it("item 34 — the notice is transient: navigating to Settings and back clears it, and a fresh init() against the same store never shows it", async () => {

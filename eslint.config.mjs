@@ -2,7 +2,11 @@ import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist/**", "node_modules/**", "coverage/**"] },
+  // dist-dev/ is the gitignored local fixture-testing build (npm run
+  // build:dev) -- bundled output, same class as dist/. Without this entry,
+  // `npm run check` fails on any machine that has ever run build:dev,
+  // purely on generated code.
+  { ignores: ["dist/**", "dist-dev/**", "node_modules/**", "coverage/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

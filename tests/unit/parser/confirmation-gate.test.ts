@@ -32,6 +32,7 @@ function buildRecord(confirmed: ConfirmedPlanInput, overrides: Partial<PaymentPl
       id: "a1b2c3",
       createdAt: "2026-08-24",
       firstPaymentDate: "2026-09-01",
+      customName: "",
     }),
     ...overrides,
   };

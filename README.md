@@ -91,10 +91,13 @@ moment someone is deciding whether to borrow, is the one thing that will not shi
 Not a slogan. Here is the whole of it.
 
 **What is stored:** the order total, the number of payments, how often they fall due, and the
-amount of each payment — for each plan you save. Plus your answer to the one question it asks you:
-whether it may read checkout pages at all. Plus two small notes about what you have already seen in
+amount of each payment — for each plan you save. If you type a name for a plan ("Laptop"), so you
+can tell it apart from another plan starting the same day, that name is stored too — you write it
+yourself, it is optional, and it is never read from any page. Plus your answer to the one question
+it asks you: whether it may read checkout pages at all. Plus two small notes about what you have already seen in
 the extension's own window: whether you have opened the 30-day view, and whether you have dismissed
-the one note about Pegasus. That is the complete list of what it holds about you — the only other
+the one note about Pegasus. Plus which appearance you picked — light, dark, or follow the system.
+That is the complete list of what it holds about you — the only other
 thing in storage is a number recording which version of the storage format is in use.
 
 **Where it is stored:** local extension storage, in your browser, on your computer. Nothing else

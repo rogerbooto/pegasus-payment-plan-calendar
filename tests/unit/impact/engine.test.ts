@@ -20,6 +20,7 @@ function plan(overrides: Partial<PaymentPlanRecord> = {}): PaymentPlanRecord {
     cadence: "BIWEEKLY",
     perInstallmentCents: assertCents(2249, "per"),
     firstPaymentDate: "2026-06-03",
+    customName: "",
     ...overrides,
   };
 }

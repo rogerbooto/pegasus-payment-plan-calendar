@@ -227,7 +227,10 @@ export function createPopupApp(container: HTMLElement, deps: PopupAppDeps = {}) 
           // §5.3 -- "Nothing changed at all": no write at all, which is
           // also what preserves `source` for free (the two fall out of the
           // same valuesChanged flag computed once in ConfirmationSheet.ts).
-          if (!changed.valuesChanged) {
+          // A rename alone IS a change that must be written -- it just
+          // never flips `source` (EditChangeSummary.nameChanged) and never
+          // moves a date, so it lands on the "dates didn't change" notice.
+          if (!changed.valuesChanged && !changed.nameChanged) {
             heroNotice = { kind: "unchanged" };
             go("hero");
             return;

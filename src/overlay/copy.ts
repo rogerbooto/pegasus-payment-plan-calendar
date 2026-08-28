@@ -65,6 +65,17 @@ export const FIELD_LABEL_CADENCE = "How often";
 export const FIELD_LABEL_EACH = "Amount per payment";
 export const FIELD_LABEL_FIRST = "First payment";
 
+/**
+ * The optional, user-typed plan name ("What it was" — "Laptop",
+ * "Headphones"), on the add, confirm and edit forms alike. The label asks
+ * for the thing, not a generic "label"/"nickname", per the founder's own
+ * framing. The hint makes the one claim that defines this field: only
+ * what the user types is saved — the page is never where it comes from.
+ */
+export const FIELD_LABEL_NAME = "What it was";
+export const FIELD_HINT_NAME = "Optional. Only what you type here is saved — it is never read from the page.";
+export const FIELD_PLACEHOLDER_NAME = "Laptop";
+
 export const CADENCE_OPTION_LABELS: Readonly<Record<"WEEKLY" | "BIWEEKLY" | "MONTHLY", string>> = {
   BIWEEKLY: "Every 2 weeks",
   WEEKLY: "Every week",
@@ -134,8 +145,13 @@ export const EDIT_TARGET_GONE = "That plan isn't there any more. Nothing was cha
  * either way) — formerly `editRowLabelSuffix`, renamed once Remove
  * started using it too.
  */
-export function planRowLabelSuffix(dateText: string, eachText: string): string {
-  return ` the plan starting ${dateText}, ${eachText} each`;
+export function planRowLabelSuffix(dateText: string, eachText: string, customName = ""): string {
+  // The user-typed plan name, when there is one, leads the suffix -- it is
+  // the strongest disambiguator two same-day plans can have (the reason
+  // the field exists), and the visible word ("Edit"/"Remove") still starts
+  // the accessible name, so SC 2.5.3 holds either way.
+  const namePart = customName === "" ? "" : ` ${customName} —`;
+  return `${namePart} the plan starting ${dateText}, ${eachText} each`;
 }
 
 /** A plan row's second line. cadenceLabel is CADENCE_OPTION_LABELS[cadence], verbatim. */

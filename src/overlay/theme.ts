@@ -262,6 +262,10 @@ export const OVERLAY_CSS = `
 .rows .date { font-weight: 600; font-size: 13.5px; font-variant-numeric: tabular-nums; min-width: 52px; }
 .rows .dow { font-size: 12px; color: var(--text-3); min-width: 30px; }
 .rows .amt { margin-left: auto; font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+/* The user-typed plan name (PlanList.ts): its own full-width line above the
+   summary line. A long name truncates with an ellipsis instead of wrapping,
+   so one row stays two lines tall in the 340px popup and the ~360px panel. */
+.rows .name { display: block; width: 100%; font-size: 12.5px; font-weight: 600; color: var(--text); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rows .sub { display: block; width: 100%; font-size: 12px; color: var(--text-2); font-weight: 400; margin-top: 3px; }
 .tag {
   display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .04em;

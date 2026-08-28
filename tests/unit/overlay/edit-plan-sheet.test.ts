@@ -32,6 +32,7 @@ function plan(overrides: Partial<PaymentPlanRecord> = {}): PaymentPlanRecord {
     cadence: "BIWEEKLY",
     perInstallmentCents: assertCents(3750, "each"),
     firstPaymentDate: "2026-08-26",
+    customName: "",
     ...overrides,
   };
 }
@@ -177,7 +178,7 @@ describe("§9.3 item 19 — EditChangeSummary", () => {
     submit(el.querySelector("form") as HTMLFormElement);
 
     expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onSave.mock.calls[0]?.[1]).toEqual({ valuesChanged: false, datesChanged: false });
+    expect(onSave.mock.calls[0]?.[1]).toEqual({ valuesChanged: false, datesChanged: false, nameChanged: false });
   });
 
   it("a cadence change yields valuesChanged: true and datesChanged: true", () => {
@@ -213,7 +214,7 @@ describe("§9.3 item 19 — EditChangeSummary", () => {
     submit(el.querySelector("form") as HTMLFormElement);
 
     const changed = onSave.mock.calls[0]?.[1];
-    expect(changed).toEqual({ valuesChanged: true, datesChanged: false });
+    expect(changed).toEqual({ valuesChanged: true, datesChanged: false, nameChanged: false });
   });
 });
 

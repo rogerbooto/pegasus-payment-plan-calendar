@@ -73,6 +73,7 @@ function makePlan(id: string, overrides: Partial<PaymentPlanRecord> = {}): Payme
     cadence: "MONTHLY",
     perInstallmentCents: assertCents(1500, "each"),
     firstPaymentDate: "2026-06-01",
+    customName: "",
     ...overrides,
   };
 }
@@ -221,6 +222,40 @@ describe("OverlayHost — per-row Edit opens the correct plan", () => {
     shadow = getShadow(document);
     expect(rowButtons(shadow, "Edit")).toHaveLength(2);
     expect(shadow.activeElement?.id).toBe("ppc-title");
+  });
+});
+
+describe("OverlayHost — a rename-only edit through the plans tab", () => {
+  it("writes the typed name, keeps source checkout_confirmed, and lands on the plans tab with the name visible in its row", async () => {
+    const store = createFakeStore();
+    const ledger = new PlanLedger(store);
+    await ledger.addPlan(makePlan("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", { source: "checkout_confirmed" }));
+    const controller = createOverlayHost(document, { store, ledger, today: () => "2026-06-01" });
+    controller.mount(recognizedState());
+    await flush();
+
+    let shadow = getShadow(document);
+    tabButton(shadow, "Plans you've entered")!.click();
+    await flush();
+    shadow = getShadow(document);
+    rowButtons(shadow, "Edit")[0]!.click();
+    await flush();
+    shadow = getShadow(document);
+
+    const nameInput = shadow.querySelector("#ppc-f-name") as HTMLInputElement;
+    expect(nameInput).not.toBeNull();
+    nameInput.value = "Laptop";
+    (shadow.querySelector("form") as HTMLFormElement).dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flush();
+
+    // Persisted through updatePlan -- the store, not just the screen.
+    const savedPlans = (await store.get(["plans"]))["plans"] as PaymentPlanRecord[];
+    expect(savedPlans[0]?.customName).toBe("Laptop");
+    expect(savedPlans[0]?.source).toBe("checkout_confirmed");
+
+    shadow = getShadow(document);
+    expect(statusNotice(shadow)?.textContent).toBe("Saved. The dates on your calendar didn't change.");
+    expect(shadow.querySelector(".rows li .name")?.textContent).toBe("Laptop");
   });
 });
 

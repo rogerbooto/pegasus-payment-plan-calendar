@@ -57,6 +57,7 @@ describe("buildConfirmedPlanRecord — the only sanctioned checkout_confirmed re
       id: "a1b2c3",
       createdAt: "2026-08-24",
       firstPaymentDate: "2026-09-01",
+      customName: "",
     });
     expect(record.source).toBe("checkout_confirmed");
     expect(() => validatePlanRecord(record)).not.toThrow();

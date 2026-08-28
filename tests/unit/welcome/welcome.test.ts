@@ -119,6 +119,7 @@ describe("welcome entry point — mounts the real onboarding screen, with the pi
       cadence: "MONTHLY",
       perInstallmentCents: 1500,
       firstPaymentDate: "2026-06-01",
+      customName: "",
     });
     await markViewedNext30(chromeLocalStore);
 

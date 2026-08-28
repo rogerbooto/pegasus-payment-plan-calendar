@@ -18,6 +18,7 @@ import { assertPositiveCents } from "../shared/money";
 import {
   INSTALLMENT_COUNT_MAX,
   INSTALLMENT_COUNT_MIN,
+  PLAN_CUSTOM_NAME_MAX_LENGTH,
   STORAGE_SCHEMA_VERSION,
 } from "../shared/constants";
 import type { PaymentPlanRecord, Theme } from "../shared/types";
@@ -27,7 +28,19 @@ import type { KeyValueStore } from "./store";
 export const STORAGE_KEY_ALLOWLIST = ["schemaVersion", "plans", "settings", "usage"] as const;
 export type StorageKey = (typeof STORAGE_KEY_ALLOWLIST)[number];
 
-/** The complete, closed field set of a stored plan record. */
+/**
+ * The complete, closed field set of a stored plan record.
+ *
+ * `customName` (the tenth field) is the user-typed plan name ("Laptop") —
+ * see its doc on PaymentPlanRecord (src/shared/types.ts) for why it can
+ * only ever be typed, never read from a page. Its name deliberately
+ * matches NO FORBIDDEN_KEY_SUBSTRINGS entry (pinned by test, not by eye).
+ * Because assertClosedFieldSet rejects a MISSING field as loudly as an
+ * unknown one, admitting it here without a migration would have made
+ * every pre-existing nine-field record unreadable and blanked the user's
+ * list — `PlanLedger.listPlans()` below carries the migration, mirroring
+ * `readSettings()`'s measurementEnabled/theme pattern.
+ */
 const PLAN_FIELD_ALLOWLIST = [
   "id",
   "createdAt",
@@ -38,6 +51,7 @@ const PLAN_FIELD_ALLOWLIST = [
   "cadence",
   "perInstallmentCents",
   "firstPaymentDate",
+  "customName",
 ] as const;
 
 /**
@@ -226,6 +240,21 @@ export function validatePlanRecord(raw: unknown): PaymentPlanRecord {
   }
   assertPositiveCents(record.orderTotalCents, "orderTotalCents");
   assertPositiveCents(record.perInstallmentCents, "perInstallmentCents");
+  const { customName } = record;
+  if (typeof customName !== "string") {
+    throw new StorageSchemaError('customName must be a string ("" when the plan has no name)');
+  }
+  if (customName !== customName.trim()) {
+    throw new StorageSchemaError("customName must carry no leading or trailing whitespace");
+  }
+  if (customName.length > PLAN_CUSTOM_NAME_MAX_LENGTH) {
+    throw new StorageSchemaError(
+      `customName must be at most ${PLAN_CUSTOM_NAME_MAX_LENGTH} characters`,);
+  }
+  // eslint-disable-next-line no-control-regex -- rejecting control characters is the point
+  if (/[\u0000-\u001F\u007F-\u009F]/.test(customName)) {
+    throw new StorageSchemaError("customName must not contain control characters");
+  }
   return record as unknown as PaymentPlanRecord;
 }
 
@@ -286,16 +315,57 @@ function isAlreadyCleanSettingsRecord(record: Record<string, unknown>): boolean 
   );
 }
 
+/**
+ * True for a plan record written before `customName` joined
+ * PLAN_FIELD_ALLOWLIST: an object that simply predates the key. Nothing
+ * else about the record is inspected here — every OTHER defect (an
+ * unknown field, a missing required field, a bad value) must still throw
+ * through validatePlanRecord exactly as it always has. This predicate
+ * exists so `listPlans()` defaults precisely ONE thing and nothing more.
+ */
+function isPreCustomNamePlanRecord(entry: unknown): entry is Record<string, unknown> {
+  return typeof entry === "object" && entry !== null && !Array.isArray(entry) && !("customName" in entry);
+}
+
 /** The single validated writer over the storage seam. */
 export class PlanLedger {
   constructor(private readonly store: KeyValueStore) {}
 
+  /**
+   * Reads the "plans" key, migrating in place any record written before
+   * `customName` existed — the same lazy-on-read shape as
+   * `readSettings()`'s measurementEnabled/theme migration, and for the
+   * same reason: assertClosedFieldSet rejects a MISSING field as loudly
+   * as an unknown one, so without this, admitting the tenth field would
+   * make every pre-existing nine-field record throw and blank the list.
+   *
+   * A record that predates the field reads back with `customName: ""`
+   * (no name — never an invented one) and the whole array is written
+   * back clean ONCE, through the same validated records, as a single
+   * `store.set` preserving array order (updatePlan's splice-in-place and
+   * the stable same-date sort both depend on that order). An array whose
+   * records all already carry the field is returned as-is with no
+   * rewrite, so a clean store is never re-written on every read. Only
+   * the absence of `customName` is defaulted: any other malformed record
+   * still throws exactly as before this field existed.
+   */
   async listPlans(): Promise<readonly PaymentPlanRecord[]> {
     const result = await this.store.get(["plans"]);
     const raw = result["plans"];
     if (raw === undefined) return [];
     if (!Array.isArray(raw)) throw new StorageSchemaError("stored plans are not an array");
-    return raw.map(validatePlanRecord);
+    let needsMigrationWrite = false;
+    const plans = raw.map((entry) => {
+      if (isPreCustomNamePlanRecord(entry)) {
+        needsMigrationWrite = true;
+        return validatePlanRecord({ ...entry, customName: "" });
+      }
+      return validatePlanRecord(entry);
+    });
+    if (needsMigrationWrite) {
+      await this.store.set({ schemaVersion: STORAGE_SCHEMA_VERSION, plans });
+    }
+    return plans;
   }
 
   async addPlan(raw: unknown): Promise<PaymentPlanRecord> {
