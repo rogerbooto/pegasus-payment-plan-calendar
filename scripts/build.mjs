@@ -3,14 +3,26 @@
 import { build } from "esbuild";
 import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
 
-// Clear the output first, so what lands here is exactly what THIS build
-// produced. Neither build used to do this, and the failure it allows is
-// quiet: a run that stops emitting a file, or one that dies partway,
-// leaves the previous run's output sitting beside a manifest that no
-// longer matches it. Chrome loads an unpacked extension straight from
-// this directory and will happily register a manifest whose files are
-// half a build old.
-await rm("dist", { recursive: true, force: true });
+/**
+ * Everything this script writes into dist/, other than the manifest and
+ * the icons. Cleared before each build so a file dropped from the entry
+ * points disappears rather than lingering beside a manifest that no
+ * longer lists it -- the failure that allows is quiet, and Chrome loads
+ * an unpacked extension straight from this directory.
+ *
+ * Deliberately not `rm -r` on the directory itself: this folder may be
+ * loaded in a browser, and removing it wholesale -- manifest included,
+ * however briefly -- can abort a service-worker registration mid-flight.
+ */
+const BUILD_OUTPUTS = [
+  "content-script.js",
+  "service-worker.js",
+  "popup.js",
+  "welcome.js",
+  "popup.html",
+  "welcome.html",
+];
+await Promise.all(BUILD_OUTPUTS.map((name) => rm(`dist/${name}`, { force: true })));
 
 await build({
   entryPoints: {

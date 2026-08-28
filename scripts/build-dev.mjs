@@ -28,6 +28,21 @@ import { buildDevMeta, deriveDevAdaptersConfig, deriveDevManifest } from "./lib/
 import { HTTP_DEFAULT_PORT, resolveFixturePort } from "./lib/fixture-port.mjs";
 
 const OUT_DIR = "dist-dev";
+/**
+ * Everything this script writes into OUT_DIR, other than the manifest and
+ * the icons. Listed explicitly so the clean step below removes exactly
+ * what a build owns -- a file dropped from the entry points disappears on
+ * the next build instead of lingering, without the directory itself ever
+ * going missing while Chrome has it loaded.
+ */
+const BUILD_OUTPUTS = [
+  "content-script.js",
+  "service-worker.js",
+  "popup.js",
+  "welcome.js",
+  "popup.html",
+  "welcome.html",
+];
 // Single source of truth (scripts/lib/fixture-port.mjs), shared with
 // scripts/dev/serve-fixtures.mjs -- see CONTRIBUTING.md and this
 // variable's use below.
@@ -71,13 +86,17 @@ const devFixtureConfigPlugin = {
   },
 };
 
-// Clear the output first -- same reasoning as scripts/build.mjs, and it
-// bites harder here: this is the directory a human keeps loaded unpacked
-// in Chrome across many rebuilds, so leftovers from an older run survive
-// far longer than they would in a shipping build. A manifest sitting
-// beside a missing welcome.html is a service-worker registration failure
-// that looks like a code fault and is not one.
-await rm(OUT_DIR, { recursive: true, force: true });
+// Clear the previous run's bundles and pages, so a file this build no
+// longer emits cannot linger beside a manifest that no longer lists it.
+//
+// Deliberately NOT `rm -r` on the whole directory: Chrome keeps this
+// folder loaded as an unpacked extension across many rebuilds, and
+// deleting the directory out from under it -- manifest included, however
+// briefly -- is itself a way to abort a service-worker registration
+// mid-flight. Removing only the files this build is about to rewrite
+// keeps the folder and its manifest continuously present.
+await Promise.all(
+  BUILD_OUTPUTS.map((name) => rm(join(OUT_DIR, name), { force: true })),);
 
 await build({
   entryPoints: {
