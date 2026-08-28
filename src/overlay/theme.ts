@@ -136,7 +136,7 @@ export const OVERLAY_CSS = `
 .panel {
   width: var(--panel-w);
   max-width: calc(100vw - 24px);
-  max-height: min(72vh, 640px);
+  max-height: 82vh;
   display: flex;
   flex-direction: column;
   background: var(--panel-bg); color: var(--text);

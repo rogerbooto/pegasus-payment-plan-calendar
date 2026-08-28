@@ -203,9 +203,15 @@ describe("D5/D7 — the popup/welcome-tab surfaces fit at 375px and never resize
     expect(body).toMatch(/max-height:\s*none/);
   });
 
-  it("OVERLAY_CSS's own .panel max-height cap is untouched (the overlay must still not take over the checkout page)", () => {
+  it("OVERLAY_CSS's .panel is still capped proportionally -- the overlay must not take over the checkout page -- but by viewport share ALONE, never a pixel ceiling", () => {
     const body = ruleBody(OVERLAY_CSS, /\.panel\s*\{/);
-    expect(body).toMatch(/max-height:\s*min\(72vh,\s*640px\)/);
+    // A proportional cap scales with the window, which is the whole point:
+    // it keeps the panel from dominating a small screen without starving
+    // it on a large one. A fixed px ceiling alongside it silently wins on
+    // any tall window and re-introduces an internal scroll the form was
+    // shortened twice to avoid, so the cap must stay vh-only.
+    expect(body).not.toMatch(/max-height:[^;]*px/);
+    expect(body).toMatch(/max-height:\s*(7[0-9]|8[0-9]|90)vh\s*;/);
   });
 
   it(".onboard defaults to 340px (matching the popup panel), and only .popup-root--tab widens it to 380px", () => {
