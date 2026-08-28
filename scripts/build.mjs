@@ -1,7 +1,16 @@
 // Produces a loadable unpacked extension in dist/.
 // Deterministic on purpose: no sourcemaps, no minification, fixed target.
 import { build } from "esbuild";
-import { copyFile, mkdir, readdir } from "node:fs/promises";
+import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
+
+// Clear the output first, so what lands here is exactly what THIS build
+// produced. Neither build used to do this, and the failure it allows is
+// quiet: a run that stops emitting a file, or one that dies partway,
+// leaves the previous run's output sitting beside a manifest that no
+// longer matches it. Chrome loads an unpacked extension straight from
+// this directory and will happily register a manifest whose files are
+// half a build old.
+await rm("dist", { recursive: true, force: true });
 
 await build({
   entryPoints: {

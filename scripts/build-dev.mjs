@@ -23,7 +23,7 @@
 //      every run of this script and never written back to src/.
 import { build } from "esbuild";
 import { join } from "node:path";
-import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { buildDevMeta, deriveDevAdaptersConfig, deriveDevManifest } from "./lib/dev-build.mjs";
 import { HTTP_DEFAULT_PORT, resolveFixturePort } from "./lib/fixture-port.mjs";
 
@@ -70,6 +70,14 @@ const devFixtureConfigPlugin = {
     });
   },
 };
+
+// Clear the output first -- same reasoning as scripts/build.mjs, and it
+// bites harder here: this is the directory a human keeps loaded unpacked
+// in Chrome across many rebuilds, so leftovers from an older run survive
+// far longer than they would in a shipping build. A manifest sitting
+// beside a missing welcome.html is a service-worker registration failure
+// that looks like a code fault and is not one.
+await rm(OUT_DIR, { recursive: true, force: true });
 
 await build({
   entryPoints: {
